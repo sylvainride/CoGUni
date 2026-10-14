@@ -24,6 +24,14 @@ class RollbackFault:
         return getattr(self.db, name)
 
 
+class LegacyError(sqlite3.OperationalError):
+    """Emulate Python 3.10's absence of exception notes, not its interpreter."""
+    def __getattribute__(self, name):
+        if name == 'add_note':
+            raise AttributeError(name)
+        return super().__getattribute__(name)
+
+
 class OwnerHardeningTests(unittest.TestCase):
     def test_fabricated_candidate_cannot_bypass_path_or_text_scope(self):
         fixture = fixtures.WorkspaceTests()
@@ -72,3 +80,15 @@ class OwnerHardeningTests(unittest.TestCase):
                         db.close()
                     with sqlite3.connect(path) as restored:
                         self.assertEqual(restored.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
+
+    def test_cleanup_without_exception_notes_still_closes_and_preserves_error(self):
+        with tempfile.TemporaryDirectory() as root, Runtime(Path(root) / 'owner.sqlite') as obj:
+            db = obj.db
+            obj.db = RollbackFault(db)
+            original = LegacyError('original')
+            with self.assertRaises(LegacyError) as seen:
+                with obj.transaction():
+                    raise original
+            self.assertIs(seen.exception, original)
+            with self.assertRaises(sqlite3.ProgrammingError):
+                db.execute('COMMIT')
