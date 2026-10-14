@@ -17,9 +17,11 @@ from universal.outbox import Outbox, FakeAdapter
 
 
 def cold_backup(paths, backup_root):
+    if any(not path.is_file() or path.is_symlink() for path in paths.values()):
+        raise GuardError('snapshot source missing or unsafe', 'BLOCK')
     backup_root.mkdir()
     for name, path in paths.items():
-        with closing(sqlite3.connect(path)) as source, closing(sqlite3.connect(backup_root / (name + '.sqlite'))) as target:
+        with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True)) as source, closing(sqlite3.connect(backup_root / (name + '.sqlite'))) as target:
             source.backup(target)
 
 
@@ -111,3 +113,12 @@ class MultistoreRestoreTests(unittest.TestCase):
             with self.assertRaises(GuardError):
                 restore_test_copies(paths, backup)
             self.assertEqual({name: path.read_bytes() for name, path in paths.items()}, before)
+
+    def test_missing_source_refuses_without_creating_empty_database_or_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = {'owner': root / 'absent.sqlite'}
+            with self.assertRaises(GuardError):
+                cold_backup(paths, root / 'backup')
+            self.assertFalse(paths['owner'].exists())
+            self.assertFalse((root / 'backup').exists())
