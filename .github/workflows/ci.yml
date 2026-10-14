@@ -78,10 +78,54 @@ jobs:
         git --version
     - name: Validate repository and checkout identity
       run: python3 -B tools/ci_repository_binding.py
-    - name: Install distribution Bubblewrap
-      run: |
+    - name: Prepare distribution Bubblewrap profile on the ephemeral CI host
+      run: |-
+        set -euo pipefail
         sudo apt-get update
-        sudo apt-get install --yes --no-install-recommends bubblewrap
+        sudo apt-get install --yes --no-install-recommends bubblewrap apparmor-profiles
+        python3 -B - <<'PY'
+        import hashlib
+        import json
+        from pathlib import Path
+        import re
+        import stat
+        import subprocess
+        def validate_profile_file(path):
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022 or metadata.st_size > 32768:
+                raise ValueError('distribution profile must be a bounded root-owned regular file')
+            data = path.read_bytes()
+            text = '\n'.join(line.split('#', 1)[0] for line in data.decode('utf-8').splitlines())
+            header = re.search(r'profile\s+bwrap\s+/usr/bin/bwrap\s+flags=\(([^)]*)\)\s*\{', text)
+            if header is None or set(flag.strip() for flag in header[1].split(',')) != {'attach_disconnected', 'mediate_deleted'}:
+                raise ValueError('unexpected executable attachment or profile flags')
+            if text.count('profile ') != 2 or 'profile unpriv_bwrap' not in text:
+                raise ValueError('expected exactly the distribution bootstrap and child profiles')
+            parent, child = text.split('profile unpriv_bwrap', 1)
+            normal_parent = ' '.join(parent.split())
+            normal_child = ' '.join(child.split())
+            if 'allow pix /** -> &bwrap//&unpriv_bwrap,' not in normal_parent:
+                raise ValueError('bootstrap must stack the capability-denying child profile')
+            if 'audit deny capability,' not in normal_child or 'allow capability' in normal_child or 'allow pix /** -> &unpriv_bwrap,' not in normal_child:
+                raise ValueError('child capability denial and recursive stacking are required')
+            return {'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
+        profile = Path('/usr/share/apparmor/extra-profiles/bwrap-userns-restrict')
+        details = validate_profile_file(profile)
+        owner = subprocess.run(['/usr/bin/dpkg-query', '-S', str(profile)], capture_output=True, text=True, check=True, timeout=5)
+        if owner.stdout.strip() != 'apparmor-profiles: ' + str(profile):
+            raise SystemExit('profile must belong to the installed distribution package')
+        verified = subprocess.run(['/usr/bin/dpkg', '--verify', 'apparmor-profiles'], capture_output=True, text=True, timeout=5)
+        if verified.returncode != 0 or verified.stdout.strip():
+            raise SystemExit('distribution package verification failed')
+        for name in ['/etc/apparmor.d/local/bwrap-userns-restrict', '/etc/apparmor.d/local/unpriv_bwrap']:
+            path = Path(name)
+            if path.exists() and any(line.split('#', 1)[0].strip() for line in path.read_text().splitlines()):
+                raise SystemExit('local profile overrides require a separate review')
+        print(json.dumps({'distribution_bwrap_profile_review': details, 'child_capabilities_required': 'DENIED'}, sort_keys=True))
+        PY
+        sudo /usr/sbin/apparmor_parser --skip-kernel-load /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+        # Add, do not replace an existing loaded policy or disable a restriction.
+        sudo /usr/sbin/apparmor_parser --add /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
     - name: Observe host policy without changing confinement
       run: |-
         python3 -B - <<'PY'
