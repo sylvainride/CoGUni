@@ -73,6 +73,8 @@ result["nproc_limit"] = list(resource.getrlimit(resource.RLIMIT_NPROC))
 status = open("/proc/self/status").read()
 result["no_new_privs"] = "NoNewPrivs:\t1" in status
 result["seccomp"] = "Seccomp:\t2" in status
+result["capabilities"] = {name: int(next(line.split(":", 1)[1].strip() for line in status.splitlines() if line.startswith(name + ":")), 16)
+                          for name in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb")}
 result["tmpfs_bytes"] = os.statvfs("/tmp").f_blocks * os.statvfs("/tmp").f_frsize
 result["visible_pids"] = sorted(int(name) for name in os.listdir("/proc") if name.isdecimal())
 result["namespaces"] = {name: os.readlink("/proc/self/ns/" + name) for name in ("pid", "net", "mnt", "user", "ipc", "uts")}
@@ -156,6 +158,7 @@ class TestIsolationV6(unittest.TestCase):
                 self.assertEqual(observed["nproc_limit"], [0, 0])
                 self.assertTrue(observed["no_new_privs"])
                 self.assertTrue(observed["seccomp"])
+                self.assertEqual(observed["capabilities"], {name: 0 for name in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb")})
                 self.assertTrue(observed["memory_enforced"])
                 self.assertTrue(observed["file_limit_enforced"])
                 self.assertLessEqual(observed["tmpfs_bytes"], TMPFS_BYTES)

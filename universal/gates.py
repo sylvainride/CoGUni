@@ -1,6 +1,6 @@
 """Owner-only, authenticated local gates; no release operation or worker endpoint.
 
-The supplied check runners are deliberately synthetic fixture validators. They
+The built-in fixture runners are deliberately synthetic validators. They
 do not execute project tests, resolve a legal license, or certify absence of
 secrets. Registering a runner is a trusted owner operation, not an agent right.
 """
@@ -43,6 +43,7 @@ class GateEngine:
     def __init__(self, runtime):
         self.runtime = runtime
         self.runners = {}
+        self.transactional_runners = set()
         with runtime.transaction():
             for sql in DDL:
                 runtime.db.execute(sql)
@@ -69,18 +70,21 @@ class GateEngine:
         except UnicodeEncodeError:
             raise GuardError("invalid gate environment") from None
 
-    def register_verifier(self, verifier_id, method, criteria, runner):
-        """Pin trusted Python runner source and allowed criteria, without a worker API."""
+    def register_verifier(self, verifier_id, method, criteria, runner, *, transactional=False):
+        """Pin an owner checker. Transactional mode is for bounded DB lookups only."""
         rt = self.runtime
         rt._id(verifier_id)
         rt._id(method)
-        if not isinstance(criteria, (set, frozenset, list, tuple)) or not criteria or not set(criteria) <= CRITERIA or not callable(runner):
+        if not isinstance(criteria, (set, frozenset, list, tuple)) or not criteria or not set(criteria) <= CRITERIA or not callable(runner) or type(transactional) is not bool:
             raise GuardError("invalid verifier registration")
         try:
             source = inspect.getsource(runner)
         except (OSError, TypeError):
             raise GuardError("verifier source unavailable") from None
-        implementation_sha = digest(source)
+        # The existing nontransactional identity remains byte-for-byte stable.
+        # Transactional runners are bounded owner DB checks, never subprocesses
+        # or project/plugin code. Their execution mode is part of the pin.
+        implementation_sha = digest(canonical({"source": source, "transactional": True})) if transactional else digest(source)
         allowed = canonical(sorted(set(criteria)))
         with rt.transaction():
             old = rt.db.execute("SELECT * FROM gate_verifiers WHERE id=?", (verifier_id,)).fetchone()
@@ -90,6 +94,35 @@ class GateEngine:
                 rt.db.execute("INSERT INTO gate_verifiers VALUES(?,?,?,?)", (verifier_id, method, implementation_sha, allowed))
                 rt._event("owner", "gate.verifier", verifier_id, "REGISTERED", {"method": method, "implementation_sha": implementation_sha})
         self.runners[verifier_id] = runner
+        if transactional:
+            self.transactional_runners.add(verifier_id)
+        else:
+            self.transactional_runners.discard(verifier_id)
+
+    def _runner_current(self, verifier_id, runner, registration):
+        try:
+            source = inspect.getsource(runner)
+            identity = digest(canonical({"source": source, "transactional": True})) if verifier_id in self.transactional_runners else digest(source)
+            return identity == registration["implementation_sha"]
+        except (OSError, TypeError):
+            return False
+
+    def _execute_check(self, runner, copied, context):
+        if runner is None or copied.get("executed") is not True:
+            result = CheckResult("UNKNOWN", "check_not_executed")
+        elif copied.get("artifact_sha") != context["artifact_sha"]:
+            result = CheckResult("FAIL", "observation_artifact_mismatch")
+        else:
+            try:
+                result = runner(copied, dict(context), self.runtime.clock())
+            except Exception:
+                result = CheckResult("UNKNOWN", "checker_error")
+        if not isinstance(result, CheckResult) or result.outcome not in OUTCOMES:
+            result = CheckResult("UNKNOWN", "checker_invalid_result")
+        self.runtime._id(result.reason)
+        if result.expires_at is not None and (type(result.expires_at) not in (int, float) or not math.isfinite(result.expires_at)):
+            result = CheckResult("UNKNOWN", "checker_invalid_expiry")
+        return result
 
     def register_synthetic_verifiers(self):
         """Install the bounded fixture runners; their synthetic origin is explicit."""
@@ -181,35 +214,26 @@ class GateEngine:
             verifier_id = context["required_verifiers"][criterion]
             registration = dict(rt.db.execute("SELECT * FROM gate_verifiers WHERE id=?", (verifier_id,)).fetchone())
             runner = self.runners.get(verifier_id)
+            transactional = verifier_id in self.transactional_runners
             epoch = self._key()["epoch"]
         # Trusted bounded algorithms, separate from the producer worker. Running
         # a new arbitrary/plugin checker needs its own isolation design first.
         if runner is not None:
-            try:
-                stable_runner = digest(inspect.getsource(runner)) == registration["implementation_sha"]
-            except (OSError, TypeError):
-                stable_runner = False
-            if not stable_runner:
+            if not self._runner_current(verifier_id, runner, registration):
                 raise GuardError("registered verifier implementation changed", "BLOCK")
-        if runner is None or copied.get("executed") is not True:
-            result = CheckResult("UNKNOWN", "check_not_executed")
-        elif copied.get("artifact_sha") != context["artifact_sha"]:
-            result = CheckResult("FAIL", "observation_artifact_mismatch")
-        else:
-            try:
-                result = runner(copied, dict(context), rt.clock())
-            except Exception:
-                result = CheckResult("UNKNOWN", "checker_error")
-        if not isinstance(result, CheckResult) or result.outcome not in OUTCOMES:
-            result = CheckResult("UNKNOWN", "checker_invalid_result")
-        rt._id(result.reason)
-        if result.expires_at is not None and (type(result.expires_at) not in (int, float) or not math.isfinite(result.expires_at)):
-            result = CheckResult("UNKNOWN", "checker_invalid_expiry")
+        if not transactional:
+            result = self._execute_check(runner, copied, context)
         with rt.transaction():
             current = self._contract(contract_id)
             key = self._key()
             if key["epoch"] != epoch or current != context:
                 raise GuardError("gate changed during check", "BLOCK")
+            if transactional:
+                if runner is not self.runners.get(verifier_id) or not self._runner_current(verifier_id, runner, registration):
+                    raise GuardError("registered verifier implementation changed", "BLOCK")
+                # Revocation and the consent lookup/signature share this owner
+                # write transaction. A pre-revocation read cannot sign later.
+                result = self._execute_check(runner, copied, context)
             attestation_id = str(uuid.uuid4())
             body = {"schema": "owner-local-check-v1", "attestation_id": attestation_id, "contract_id": contract_id,
                     "contract_sha": digest(canonical(context)), "criterion": criterion, "signing_epoch": epoch,
@@ -242,8 +266,12 @@ class GateEngine:
                 return "revoked"
             if body.get("outcome") != "PASS":
                 return "outcome_" + str(body.get("outcome", "UNKNOWN"))
+            created, now = body.get("created"), self.runtime.clock()
+            if (type(created) not in (int, float) or not math.isfinite(created)
+                    or type(now) not in (int, float) or not math.isfinite(now) or now < created):
+                return "invalid_check_time"
             expiry = body.get("expires_at")
-            if expiry is not None and (type(expiry) not in (int, float) or not math.isfinite(expiry) or expiry <= self.runtime.clock()):
+            if expiry is not None and (type(expiry) not in (int, float) or not math.isfinite(expiry) or expiry <= now):
                 return "expired"
             return None
         except (KeyError, TypeError, ValueError):

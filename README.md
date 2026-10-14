@@ -55,3 +55,11 @@ CI is prepared in this snapshot but has not run on GitHub at review time. A sepa
 verified remote integrity ruleset targets main and blocks deletion and force
 pushes; main does not yet exist. Pull request and required-check enforcement
 are pending bootstrap. See docs/ADR_012_CI_BOOTSTRAP.md for the precise scope.
+
+## Owner consent
+
+The optional owner consent authority records expiring and revocable consent
+for one exact local gate contract. It rejects worker approval flags and never
+grants external publication or spending rights. See
+[ADR 013](docs/ADR_013_OWNER_CONSENT.md) for the API, trust boundary and checks
+that remain to implement.

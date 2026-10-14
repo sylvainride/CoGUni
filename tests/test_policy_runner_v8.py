@@ -170,11 +170,33 @@ class ActualPolicyRunnerTests(unittest.TestCase):
 
     def test_fresh_independent_process_per_case_resets_candidate_globals(self):
         source = "counter = 0\ndef solve():\n    global counter\n    counter += 1\n    return counter\n"
-        result = self.run_candidate(source, [{"args": [], "expected": 1}] * 3)
+        actual_popen = subprocess.Popen
+        sandbox_executable = shutil.which("bwrap")
+        launches = []
+
+        def observe_launch(command, *args, **kwargs):
+            process = actual_popen(command, *args, **kwargs)
+            if command[0] == sandbox_executable:
+                launches.append(process)
+            return process
+
+        with patch("universal.policy_runner.subprocess.Popen", side_effect=observe_launch):
+            result = self.run_candidate(source, [{"args": [], "expected": 1}] * 3)
         cases = result["observations"]["cases"]
         self.assertEqual(result["criteria"]["tests"]["outcome"], "PASS", result)
         self.assertEqual(len({case["ready"]["nonce"] for case in cases}), 3)
-        self.assertEqual(len({case["ready"]["namespaces"]["pid"] for case in cases}), 3)
+        # Namespace inode numbers describe a live namespace; the kernel can
+        # reuse them after a previous child and its namespace are gone.
+        # Observe three real launches and completed executions instead.
+        self.assertEqual(len(launches), 3)
+        self.assertTrue(all(process.poll() == 0 for process in launches))
+        print(json.dumps({"fresh_process_probe": {
+            "actual_sandbox_launches": len(launches),
+            "case_count": len(cases),
+            "unique_nonces": len({case["ready"]["nonce"] for case in cases}),
+            "distinct_observed_pid_namespace_numbers": len({case["ready"]["namespaces"]["pid"] for case in cases}),
+            "all_processes_completed": all(process.poll() == 0 for process in launches),
+        }}, sort_keys=True))
 
     def test_bool_int_float_comparison_is_strict_json(self):
         for returned, expected in (("True", 1), ("1", True), ("1.0", 1), ("False", 0)):
