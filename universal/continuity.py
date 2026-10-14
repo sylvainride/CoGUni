@@ -185,7 +185,9 @@ class ContinuityJournal:
             yield
             self.db.execute("COMMIT")
         except BaseException:
-            self.db.execute("ROLLBACK")
+            # Some SQLite storage errors automatically abort the transaction.
+            if self.db.in_transaction:
+                self.db.execute("ROLLBACK")
             raise
 
     def _now(self):
