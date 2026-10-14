@@ -64,16 +64,19 @@ class GitOwnerTests(unittest.TestCase):
             with self.subTest(route=route), self.assertRaises(GuardError):
                 GitHubReadOnlyProvider().get(route)
 
-    def proof(self):
+    def proof(self, *, project_profile=False):
+        from tests import test_python_project as projects
+        owner_policy = projects.policy() if project_profile else gates.owner_policy()
+        candidate = projects.files() if project_profile else gates.fixture('valid')
         v = GenerativeValidator(self.rt)
-        v.register_policy('normalize', gates.owner_policy())
+        v.register_policy('normalize', owner_policy)
         self.rt.put_resource('source', 'owner contract')
         self.rt.source_snapshot('pin', 'source', 'owner_contract')
         self.rt.put_resource('output', '')
         self.rt.add_task('T', 'source', 'output', 'candidate', None, validation_mode=MODE, policy_id='normalize')
         claim = self.rt.claim('producer', ttl=60, environment=environment_identity(), supported_actions=['candidate'])
         self.rt.execute(Intent(claim['run_id'], 'artifact.write', 'output', 1, 'candidate', claim['fence'],
-                               {'content': canonical({'files': gates.fixture('valid')})}), claim['token'])
+                               {'content': canonical({'files': candidate})}), claim['token'])
         return v.verify('T', environment_identity(), expected_run_id=claim['run_id']), v
 
     def workspace(self):
@@ -109,3 +112,21 @@ class GitOwnerTests(unittest.TestCase):
             validator.rotate_signing_key()
             with self.assertRaises(GuardError):
                 self.broker.plan(ws, candidate, evidence_id=proof['evidence'], environment=environment_identity())
+
+    def test_offline_multi_component_project_proof_plan_and_local_cas(self):
+        from tests import test_python_project as projects
+        from universal.tool_router import Request, select
+        # Explicit owner fixture, not a mission received from Chat.
+        route = select(Request('LOCAL_COMPUTE', False, False, False, True, False, False, False, 0))
+        self.assertEqual(route.route, 'DISABLED')
+        proof, _ = self.proof(project_profile=True)
+        project = projects.files()
+        with LocalWorkspace(self.fixture.source, self.fixture.binding, run_id='offline-e2e',
+                            allowed_paths=tuple(project), expires_unix=200,
+                            clock=lambda: self.fixture.now[0]) as ws:
+            candidate = ws.prepare(project, expected_head=self.fixture.sha, expected_tree=self.fixture.tree)
+            plan = self.broker.plan(ws, candidate, evidence_id=proof['evidence'], environment=environment_identity())
+            self.assertFalse(plan.execution_authorized)
+            ws.advance(candidate, validated_tree=plan.candidate_tree)
+            self.assertEqual(ws.head(), candidate.commit)
+            self.assertEqual(self.fixture.git('rev-parse', 'HEAD'), self.fixture.sha)
