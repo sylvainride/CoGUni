@@ -49,8 +49,9 @@ class ToolRouterTests(unittest.TestCase):
             for value in ('yes', 1, [], None):
                 with self.subTest(name=name, value=value):
                     self.assertEqual(select(replace(BASE, **{name: value}), enabled=True).route, 'DENY')
-        for value in (True, -1, 1.0, '1'):
+        for value in (True, -1, 1.0, '1', 10**10):
             self.assertEqual(select(replace(BASE, budget_calls=value), enabled=True).route, 'DENY')
+        self.assertEqual(select(replace(BASE, task='X' * 1000), enabled=True).route, 'DENY')
         with self.assertRaises(ValueError):
             select(None)
 

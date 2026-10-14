@@ -31,9 +31,9 @@ class Decision:
 def select(req, *, enabled=False):
     if type(req) is not Request or type(enabled) is not bool:
         raise ValueError('plain request and explicit boolean flag required')
-    if type(req.task) is not str or req.task not in {'READ', 'LOCAL_COMPUTE', 'WRITE'}:
+    if type(req.task) is not str or len(req.task) > 32 or req.task not in {'READ', 'LOCAL_COMPUTE', 'WRITE'}:
         return Decision('DENY', 'unknown task')
-    if type(req.budget_calls) is not int or req.budget_calls < 0:
+    if type(req.budget_calls) is not int or not 0 <= req.budget_calls <= 10**9:
         return Decision('DENY', 'invalid simulated budget')
     if any(type(getattr(req, name)) is not bool for name in (
             'api_available', 'cli_available', 'browser_available', 'offline_possible',
