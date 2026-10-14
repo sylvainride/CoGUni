@@ -74,7 +74,9 @@ class FakeAdapter:
             yield
             self.db.execute("COMMIT")
         except BaseException:
-            self.db.execute("ROLLBACK")
+            # Keep the original storage error if SQLite already rolled back.
+            if self.db.in_transaction:
+                self.db.execute("ROLLBACK")
             raise
 
     @property

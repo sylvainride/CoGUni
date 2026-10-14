@@ -158,7 +158,10 @@ class Runtime:
             yield
             self.db.execute("COMMIT")
         except BaseException:
-            self.db.execute("ROLLBACK")
+            # SQLITE_FULL/IOERR can already roll back the transaction. Preserve
+            # that original error instead of masking it with a second rollback.
+            if self.db.in_transaction:
+                self.db.execute("ROLLBACK")
             raise
 
     def _event(self, actor, action, target, outcome, metadata=None):
