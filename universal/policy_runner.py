@@ -117,6 +117,9 @@ def _files(files):
 
 def validate_policy(policy):
     """Return a bounded snapshot; defining a policy remains an owner operation."""
+    if type(policy) is dict and policy.get("profile") == "python-project-v1":
+        from .project_runner import validate_project_policy
+        return validate_project_policy(policy)
     copied, _ = _json(policy, MAX_POLICY_BYTES)
     if type(copied) is not dict or set(copied) != _POLICY_FIELDS:
         raise ValueError("invalid policy schema")
@@ -378,7 +381,7 @@ def _ready(message, nonce, tree_sha, context_digest, index):
             and type(fds) is list and len(fds) <= 5 and all(type(fd) is int and fd >= 0 for fd in fds))
 
 
-def _run_case(files, policy, args, index, tree_sha, context_digest, deadline):
+def _run_case(files, policy, args, index, tree_sha, context_digest, deadline, *, project=None):
     parent, child = socket.socketpair()
     process, capture, ready, staging = None, _Capture(), None, None
     nonce = secrets.token_hex(24)
@@ -390,7 +393,8 @@ def _run_case(files, policy, args, index, tree_sha, context_digest, deadline):
         package.mkdir()
         # Do not bind the owner's package directory: it could acquire private
         # files later. This immutable mount contains only these trusted sources.
-        for name in ("isolation.py", "protocol.py", "generative_child.py"):
+        bootstrap = "generative_child.py" if project is None else "project_child.py"
+        for name in ("isolation.py", "protocol.py", bootstrap):
             source = trusted_package / name
             if not source.is_file() or source.is_symlink():
                 raise IsolationUnavailable("trusted generative bootstrap is missing")
@@ -399,16 +403,21 @@ def _run_case(files, policy, args, index, tree_sha, context_digest, deadline):
         (package / "child.py").write_text("", encoding="utf-8")
         command = build_command(package, child.fileno(), "probe")
         position = command.index("/app/universal/child.py")
-        command[position] = "/app/universal/generative_child.py"
+        command[position] = "/app/universal/" + bootstrap
         process = subprocess.Popen(command, pass_fds=(child.fileno(),), close_fds=True,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    env={"PATH": os.defpath, "LANG": "C.UTF-8"})
         child.close()
         parent.settimeout(max(0.001, deadline - time.monotonic()))
-        send_message(parent, {"version": VERSION, "type": "execute", "nonce": nonce,
-                              "tree_sha": tree_sha, "context_digest": context_digest,
-                              "case_index": index, "source": files["candidate.py"],
-                              "function": policy["function"], "args": args}, deadline=deadline)
+        payload = {"version": VERSION, "type": "execute", "nonce": nonce,
+                   "tree_sha": tree_sha, "context_digest": context_digest,
+                   "case_index": index, "args": args}
+        if project is None:
+            payload.update(source=files["candidate.py"], function=policy["function"])
+        else:
+            payload.update(modules=project, module=policy["tests"][index]["module"],
+                           function=policy["tests"][index]["function"])
+        send_message(parent, payload, deadline=deadline)
         for stream in (parent, process.stdout, process.stderr):
             os.set_blocking(stream.fileno(), False)
         ready = _receive(parent, process, capture, deadline)
@@ -481,6 +490,9 @@ def run_policy_checks(files: dict[str, str], policy: dict, context: dict, *, tim
     nonpositive evidence. Context must be nonsecret JSON audit metadata; only
     its SHA-256, never its contents, crosses the child boundary.
     """
+    if type(policy) is dict and policy.get("profile") == "python-project-v1":
+        from .project_runner import run_project_checks
+        return run_project_checks(files, policy, context, timeout=timeout)
     started = time.monotonic()
     if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0.05 <= timeout <= 10:
         raise ValueError("invalid runner deadline")
