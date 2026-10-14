@@ -82,6 +82,45 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install --yes --no-install-recommends bubblewrap
+    - name: Observe host policy without changing confinement
+      run: |-
+        python3 -B - <<'PY'
+        import hashlib
+        import json
+        from pathlib import Path
+        import subprocess
+        def token(name, allowed):
+            try:
+                value = Path(name).read_text().strip()
+                return value if value in allowed else 'UNKNOWN'
+            except OSError:
+                return 'UNAVAILABLE'
+        profiles = {}
+        for name in ['/etc/apparmor.d/bwrap-userns-restrict', '/usr/share/apparmor/extra-profiles/bwrap-userns-restrict']:
+            path = Path(name)
+            row = {'present': path.is_file(), 'symlink': path.is_symlink()}
+            if row['present'] and not row['symlink']:
+                with path.open('rb') as file:
+                    data = file.read(32769)
+                if len(data) <= 32768:
+                    row.update(sha256=hashlib.sha256(data).hexdigest(),
+                               child_capability_denial=b'audit deny capability,' in data,
+                               child_profile=b'profile unpriv_bwrap' in data)
+            profiles[name] = row
+        package = subprocess.run(['/usr/bin/dpkg-query', '-W', '-f=${binary:Package} ${Version}\n', 'bubblewrap', 'apparmor', 'apparmor-profiles'],
+                                 capture_output=True, text=True, timeout=5)
+        versions = {}
+        for line in package.stdout.splitlines():
+            fields = line.split()
+            if len(fields) == 2 and fields[0] in {'bubblewrap', 'apparmor', 'apparmor-profiles'} and len(fields[1]) < 80:
+                versions[fields[0]] = fields[1]
+        print(json.dumps({'host_policy_observation': {
+            'apparmor_enabled': token('/sys/module/apparmor/parameters/enabled', {'Y', 'N'}),
+            'unprivileged_userns_restriction': token('/proc/sys/kernel/apparmor_restrict_unprivileged_userns', {'0', '1'}),
+            'controller_profile': token('/proc/self/attr/current', {'unconfined'}),
+            'distribution_profiles': profiles, 'package_versions': versions,
+            'policy_changed': False, 'raw_profiles_emitted': False}}, sort_keys=True))
+        PY
     - name: Qualify the actual isolation boundary
       run: python3 -B tools/run_ci_checks.py --mode isolation --out evidence/isolation
     - name: Run the entire discovered suite
@@ -112,4 +151,17 @@ jobs:
             }
             codes = sorted(code for code, marker in known.items() if marker in text)
             print(json.dumps({'isolation_diagnostic_codes': codes, 'raw_tracebacks_emitted': False}, sort_keys=True))
+        # Observe fixed kernel denial fields; do not print the kernel log.
+        import subprocess
+        denied = None
+        try:
+            probe = subprocess.run(['/usr/bin/sudo', '-n', '/usr/bin/dmesg'],
+                                   capture_output=True, text=True, timeout=5)
+            if probe.returncode == 0:
+                denied = any('apparmor="DENIED"' in line and 'comm="bwrap"' in line
+                             and 'capname="net_admin"' in line for line in probe.stdout.splitlines())
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        print(json.dumps({'apparmor_bwrap_net_admin_denial_observed': denied,
+                          'raw_kernel_log_emitted': False}, sort_keys=True))
         PY
