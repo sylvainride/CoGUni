@@ -98,4 +98,18 @@ jobs:
             path = Path(name)
             if path.is_file():
                 print(json.dumps({"evidence_file": name, "summary": json.loads(path.read_text())}, sort_keys=True))
+        # Emit fixed diagnostic codes only; private raw tracebacks stay local.
+        isolation_log = Path('evidence/isolation/tests.log')
+        if isolation_log.is_file():
+            text = isolation_log.read_text()
+            known = {
+                'BWRAP_UID_MAP_DENIED': 'setting up uid map: Permission denied',
+                'BWRAP_NETWORK_SETUP_DENIED': 'loopback: Failed RTM_NEWADDR: Operation not permitted',
+                'BWRAP_NAMESPACE_CREATION_DENIED': 'Creating new namespace failed:',
+                'BWRAP_UNSUPPORTED_ARGUMENT': 'Unknown option',
+                'CHILD_STARTUP_PERMISSION_DENIED': 'Permission denied',
+                'IPC_TIMEOUT': 'TimeoutError',
+            }
+            codes = sorted(code for code, marker in known.items() if marker in text)
+            print(json.dumps({'isolation_diagnostic_codes': codes, 'raw_tracebacks_emitted': False}, sort_keys=True))
         PY
