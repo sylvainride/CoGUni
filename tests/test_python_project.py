@@ -1,5 +1,5 @@
 """Owner unittest oracles run flat multi-module projects in fresh bwrap children."""
-import copy
+import subprocess
 from pathlib import Path
 import shutil
 import tempfile
@@ -165,3 +165,9 @@ class PythonProjectTests(unittest.TestCase):
                     self.assertEqual(rt.db.execute('SELECT count(*) FROM evidence').fetchone()[0], 0)
                 finally:
                     rt.close()
+
+    def test_git_tree_timeout_is_nonpositive_evidence_not_an_exception(self):
+        with patch('universal.project_runner._git_tree', side_effect=subprocess.TimeoutExpired('git', 1)):
+            r = run_policy_checks(files(), policy(), {})
+        for criterion in ('tests', 'provenance', 'environment'):
+            self.assertEqual(r['criteria'][criterion]['outcome'], 'NOT_RUN')

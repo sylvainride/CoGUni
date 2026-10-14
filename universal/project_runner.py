@@ -8,6 +8,7 @@ import hashlib
 import math
 import re
 import time
+import subprocess
 
 from .policy_runner import (_json, _files, _static_checks, _run_case, _git_tree,
                             _criterion, _bound_observations, MAX_POLICY_BYTES,
@@ -106,7 +107,7 @@ def run_project_checks(files, policy, context, *, timeout=10.0):
               'criteria': criteria, 'observations': observations}
     try:
         result['tree_sha'] = _git_tree(files, deadline)
-    except (IsolationUnavailable, TimeoutError, OSError):
+    except (IsolationUnavailable, TimeoutError, subprocess.TimeoutExpired, OSError):
         for name in ('tests', 'provenance', 'environment'):
             criteria[name] = _criterion('NOT_RUN', 'tree_unavailable')
         return result
