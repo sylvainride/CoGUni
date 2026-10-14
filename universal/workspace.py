@@ -214,6 +214,14 @@ class LocalWorkspace:
         parents = self._git('rev-list', '--parents', '-n', '1', candidate.commit).decode().split()
         if parents != [candidate.commit, candidate.parent]:
             raise WorkspaceConflict('candidate parent mismatch')
+        # Candidate is a public value object. Recheck actual objects rather
+        # than assuming every trusted caller obtained it through prepare().
+        paths = self._git('diff-tree', '--no-commit-id', '--name-only', '-r',
+                          '-z', candidate.parent, candidate.commit).split(b'\0')
+        changed = {path.decode('utf-8', 'strict') for path in paths if path}
+        if not changed or not changed <= self.allowed_paths:
+            raise WorkspaceConflict('candidate changes paths outside owner scope')
+        self._check_modes(candidate.commit)
         self._live()
         self._git('update-ref', self.ref, candidate.commit, candidate.parent)
         return candidate.commit

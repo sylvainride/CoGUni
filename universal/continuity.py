@@ -184,10 +184,19 @@ class ContinuityJournal:
         try:
             yield
             self.db.execute("COMMIT")
-        except BaseException:
+        except BaseException as original:
             # Some SQLite storage errors automatically abort the transaction.
-            if self.db.in_transaction:
-                self.db.execute("ROLLBACK")
+            try:
+                if self.db.in_transaction:
+                    self.db.execute("ROLLBACK")
+            except BaseException as cleanup:
+                # A failed rollback leaves a poisoned connection: never allow a
+                # later operation to accidentally commit the unfinished write.
+                original.add_note("Rollback failed: " + type(cleanup).__name__)
+                try:
+                    self.db.close()
+                except BaseException as closing:
+                    original.add_note("Connection close failed: " + type(closing).__name__)
             raise
 
     def _now(self):
