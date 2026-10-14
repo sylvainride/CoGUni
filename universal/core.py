@@ -157,11 +157,22 @@ class Runtime:
         try:
             yield
             self.db.execute("COMMIT")
-        except BaseException:
+        except BaseException as original:
             # SQLITE_FULL/IOERR can already roll back the transaction. Preserve
             # that original error instead of masking it with a second rollback.
-            if self.db.in_transaction:
-                self.db.execute("ROLLBACK")
+            try:
+                if self.db.in_transaction:
+                    self.db.execute("ROLLBACK")
+            except BaseException as cleanup:
+                # A failed rollback leaves a poisoned connection: never allow a
+                # later operation to accidentally commit the unfinished write.
+                if hasattr(original, "add_note"):
+                    original.add_note("Rollback failed: " + type(cleanup).__name__)
+                try:
+                    self.db.close()
+                except BaseException as closing:
+                    if hasattr(original, "add_note"):
+                        original.add_note("Connection close failed: " + type(closing).__name__)
             raise
 
     def _event(self, actor, action, target, outcome, metadata=None):
