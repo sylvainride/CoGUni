@@ -123,9 +123,9 @@ jobs:
                 raise SystemExit('local profile overrides require a separate review')
         print(json.dumps({'distribution_bwrap_profile_review': details, 'child_capabilities_required': 'DENIED'}, sort_keys=True))
         PY
-        sudo /usr/sbin/apparmor_parser --skip-kernel-load /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+        sudo /usr/sbin/apparmor_parser --skip-cache --skip-kernel-load /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
         # Add, do not replace an existing loaded policy or disable a restriction.
-        sudo /usr/sbin/apparmor_parser --add /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+        sudo /usr/sbin/apparmor_parser --skip-cache --add /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
     - name: Observe host policy without changing confinement
       run: |-
         python3 -B - <<'PY'
