@@ -95,16 +95,18 @@ jobs:
             if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022 or metadata.st_size > 32768:
                 raise ValueError('distribution profile must be a bounded root-owned regular file')
             data = path.read_bytes()
+            if hashlib.sha256(data).hexdigest() != '11d39094f044f0cda0febb3ad517b830301da6b2ce929664af09ee9e4dd264f9':
+                raise ValueError('distribution profile differs from the reviewed Ubuntu Noble policy')
             text = '\n'.join(line.split('#', 1)[0] for line in data.decode('utf-8').splitlines())
             header = re.search(r'profile\s+bwrap\s+/usr/bin/bwrap\s+flags=\(([^)]*)\)\s*\{', text)
-            if header is None or set(flag.strip() for flag in header[1].split(',')) != {'attach_disconnected', 'mediate_deleted'}:
+            if header is None or set(flag.strip() for flag in header[1].split(',')) != {'attach_disconnected'}:
                 raise ValueError('unexpected executable attachment or profile flags')
             if text.count('profile ') != 2 or 'profile unpriv_bwrap' not in text:
                 raise ValueError('expected exactly the distribution bootstrap and child profiles')
             parent, child = text.split('profile unpriv_bwrap', 1)
             normal_parent = ' '.join(parent.split())
             normal_child = ' '.join(child.split())
-            if 'allow pix /** -> &bwrap//&unpriv_bwrap,' not in normal_parent:
+            if 'allow px /** -> bwrap//&unpriv_bwrap,' not in normal_parent:
                 raise ValueError('bootstrap must stack the capability-denying child profile')
             if 'audit deny capability,' not in normal_child or 'allow capability' in normal_child or 'allow pix /** -> &unpriv_bwrap,' not in normal_child:
                 raise ValueError('child capability denial and recursive stacking are required')
