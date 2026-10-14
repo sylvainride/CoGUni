@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.sqlite*
+*.db
+*.zip
+*.bundle
+*.log
+*.jsonl
+.env
+.env.*
+backups/
+evidence/
+private/
