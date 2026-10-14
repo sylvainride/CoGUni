@@ -1,0 +1,101 @@
+name: CoGUni checks
+'on':
+  push:
+    branches:
+    - main
+    - work/**
+    - bootstrap/**
+  pull_request:
+    branches:
+    - main
+  workflow_dispatch: {}
+permissions: {}
+concurrency:
+  group: coguni-checks-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONWARNINGS: error::ResourceWarning
+jobs:
+  owner-contracts:
+    name: owner-contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+    - name: Fetch the bound public event commit without credentials
+      shell: bash
+      run: |-
+        set -euo pipefail
+        [[ "$GITHUB_REPOSITORY" == "sylvainride/CoGUni" ]]
+        [[ "$GITHUB_REPOSITORY_ID" == "1418009675" ]]
+        [[ "$GITHUB_REPOSITORY_OWNER_ID" == "265171248" ]]
+        [[ "$GITHUB_SERVER_URL" == "https://github.com" ]]
+        [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+        git init --quiet
+        git remote add origin https://github.com/sylvainride/CoGUni.git
+        git -c core.hooksPath=/dev/null fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+        git -c core.hooksPath=/dev/null checkout --quiet --detach FETCH_HEAD
+        python3 --version
+        git --version
+    - name: Validate repository and checkout identity
+      run: python3 -B tools/ci_repository_binding.py
+    - name: Run owner and contract checks
+      run: python3 -B tools/run_ci_checks.py --mode owner --out evidence/owner
+    - name: Run continuity fixtures
+      run: python3 -B tools/simulate_continuity_v8.py --variants 30 --seed 813 --out evidence/continuity
+    - name: Run local outbox and owner replays
+      run: python3 -B tools/run_simulations_v7.py --out evidence/replays
+    - name: Emit whitelisted JSON evidence to the job log
+      if: always()
+      run: |-
+        python3 -B - <<'PY'
+        import json
+        from pathlib import Path
+        for name in ['evidence/owner/results.json', 'evidence/continuity/summary.json', 'evidence/replays/SIMULATIONS_V7_SUMMARY.json']:
+            path = Path(name)
+            if path.is_file():
+                print(json.dumps({"evidence_file": name, "summary": json.loads(path.read_text())}, sort_keys=True))
+        PY
+  sandbox-runtime:
+    name: sandbox-runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+    - name: Fetch the bound public event commit without credentials
+      shell: bash
+      run: |-
+        set -euo pipefail
+        [[ "$GITHUB_REPOSITORY" == "sylvainride/CoGUni" ]]
+        [[ "$GITHUB_REPOSITORY_ID" == "1418009675" ]]
+        [[ "$GITHUB_REPOSITORY_OWNER_ID" == "265171248" ]]
+        [[ "$GITHUB_SERVER_URL" == "https://github.com" ]]
+        [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+        git init --quiet
+        git remote add origin https://github.com/sylvainride/CoGUni.git
+        git -c core.hooksPath=/dev/null fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+        git -c core.hooksPath=/dev/null checkout --quiet --detach FETCH_HEAD
+        python3 --version
+        git --version
+    - name: Validate repository and checkout identity
+      run: python3 -B tools/ci_repository_binding.py
+    - name: Install distribution Bubblewrap
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends bubblewrap
+    - name: Qualify the actual isolation boundary
+      run: python3 -B tools/run_ci_checks.py --mode isolation --out evidence/isolation
+    - name: Run the entire discovered suite
+      run: python3 -B tools/run_ci_checks.py --mode full --out evidence/full
+    - name: Run bounded generative fixtures
+      run: python3 -B tools/run_generative_cases_v8.py --out evidence/generative
+    - name: Emit whitelisted JSON evidence to the job log
+      if: always()
+      run: |-
+        python3 -B - <<'PY'
+        import json
+        from pathlib import Path
+        for name in ['evidence/isolation/results.json', 'evidence/full/results.json', 'evidence/generative/summary.json']:
+            path = Path(name)
+            if path.is_file():
+                print(json.dumps({"evidence_file": name, "summary": json.loads(path.read_text())}, sort_keys=True))
+        PY
