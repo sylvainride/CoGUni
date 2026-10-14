@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from tests import test_workspace as fixtures
-from universal.workspace import Candidate, WorkspaceConflict
+from universal.workspace import Candidate, LocalWorkspace
 from universal.core import Runtime
 from universal.continuity import ContinuityJournal
 from universal.outbox import FakeAdapter
@@ -92,3 +92,26 @@ class OwnerHardeningTests(unittest.TestCase):
             self.assertIs(seen.exception, original)
             with self.assertRaises(sqlite3.ProgrammingError):
                 db.execute('COMMIT')
+
+    def test_fabricated_candidate_cannot_bypass_aggregate_patch_limit(self):
+        fixture = fixtures.WorkspaceTests()
+        fixture.setUp()
+        try:
+            paths = tuple('part' + str(i) + '.txt' for i in range(5))
+            with LocalWorkspace(fixture.source, fixture.binding, run_id='aggregate', allowed_paths=paths,
+                                expires_unix=200, clock=lambda: fixture.now[0]) as ws:
+                patches = {name: 'X' * 131072 for name in paths}
+                with self.assertRaises(ValueError):
+                    ws.prepare(patches, expected_head=fixture.sha, expected_tree=fixture.tree)
+                blob = ws._git('hash-object', '-w', '--stdin', data=b'X' * 131072).decode().strip()
+                index = ws.root / 'forged-large'
+                ws._git('read-tree', fixture.sha, index=index)
+                ws._git('update-index', '-z', '--index-info', index=index,
+                        data=b''.join(('100644 ' + blob + '\t' + name + '\0').encode() for name in paths))
+                tree = ws._git('write-tree', index=index).decode().strip()
+                commit = ws._git('commit-tree', tree, '-p', fixture.sha, data=b'oversized patch\n').decode().strip()
+                with self.assertRaises(ValueError):
+                    ws.advance(Candidate(fixture.sha, tree, commit), validated_tree=tree)
+                self.assertEqual(ws.head(), fixture.sha)
+        finally:
+            fixture.tearDown()
