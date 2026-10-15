@@ -58,6 +58,18 @@ class InertAdapterRegistryTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             registry._slots['unexpected'] = floot
 
+    def test_registry_slots_cannot_be_replaced_after_validation(self):
+        from types import MappingProxyType
+        a, b = self.slot('fixture-A'), self.slot('fixture-B')
+        registry = InertAdapterRegistry((a,))
+        self.assertEqual(registry.preview(b.profile, now_unix=150, planner_enabled=True).route, 'BLOCK')
+        with self.assertRaises((AttributeError, TypeError)):
+            registry._slots = MappingProxyType({'fixture-B': b})
+        with self.assertRaises((AttributeError, TypeError)):
+            registry._new_slots = MappingProxyType({'fixture-B': b})
+        self.assertEqual(registry.project_ids(), ('fixture-A',))
+        self.assertEqual(registry.preview(b.profile, now_unix=150, planner_enabled=True).route, 'BLOCK')
+
     def test_expiry_does_not_infer_connected_tool(self):
         slot = self.slot('fixture-A')
         registry = InertAdapterRegistry((slot,))

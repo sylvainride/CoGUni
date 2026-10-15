@@ -16,7 +16,10 @@ class AdapterSlot:
     capability: ReadCapability
 
 
+@dataclass(frozen=True, slots=True, init=False, eq=False)
 class InertAdapterRegistry:
+    """Immutable mapping after construction, including replacement of _slots."""
+    _slots: MappingProxyType
     def __init__(self, slots=()):
         if type(slots) is not tuple or len(slots) > 24:
             raise ValueError('bounded immutable adapter slots required')
@@ -33,7 +36,7 @@ class InertAdapterRegistry:
             if profile.project_id in by_id:
                 raise ValueError('duplicate project ID, including incompatible owner')
             by_id[profile.project_id] = slot
-        self._slots = MappingProxyType(by_id)
+        object.__setattr__(self, '_slots', MappingProxyType(by_id))
 
     def project_ids(self):
         return tuple(sorted(self._slots))
