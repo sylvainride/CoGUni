@@ -1,0 +1,11 @@
+# EXAMPLE ONLY: NOT INSTALLED OR ENABLED; NO INSTALL SECTION.
+[Unit]
+Description=CoGUni passive synthetic observer timer (EXAMPLE DISABLED)
+ConditionPathExists=/__COGUNI_P6_DISABLED_UNTIL_APPROVED__
+RefuseManualStart=yes
+
+[Timer]
+Unit=coguni-observer.service
+OnUnitInactiveSec=900s
+AccuracySec=1min
+Persistent=false

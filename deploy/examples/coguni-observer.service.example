@@ -1,0 +1,28 @@
+# EXAMPLE ONLY: NOT INSTALLED. REMOVE FAIL-CLOSED CONDITION ONLY AFTER HUMAN APPROVAL.
+[Unit]
+Description=CoGUni passive synthetic owner observer (EXAMPLE DISABLED)
+ConditionPathExists=/__COGUNI_P6_DISABLED_UNTIL_APPROVED__
+RefuseManualStart=yes
+
+[Service]
+Type=oneshot
+User=coguni-observer
+Group=coguni-observer
+WorkingDirectory=/srv/coguni/source
+ExecStart=/usr/bin/python3 -B -m universal.host_main observe-once --config /var/lib/coguni-private/host.json --checkpoint /var/lib/coguni-private/checkpoint.json
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/coguni-private
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=yes
+LockPersonality=yes
+KillMode=control-group
+TimeoutStartSec=43s
+TimeoutStopSec=5s
+StandardOutput=null
+StandardError=null
