@@ -3,17 +3,17 @@
   "request": {
     "envelope": {
       "schema_version": 1,
-      "mission_id": "chat-native-a-20261015-1633",
-      "idempotency_key": "key-synthetic-A-chat-native-a-20261015-1633",
+      "mission_id": "chat-native-b-20261015-1638",
+      "idempotency_key": "key-synthetic-B-chat-native-b-20261015-1638",
       "project": {
         "kind": "local",
-        "id": "synthetic-A",
+        "id": "synthetic-B",
         "owner": "265171248",
-        "base_version": "48ca6d7477a51167b6c6d42206d424a27875905e345435b562f16357e0130457",
+        "base_version": "843ee679e2e40465b4bcb9bba8437168d2c831f96624daae780b70859fa919fe",
         "source_of_truth": "owner-synthetic-fixture"
       },
       "contract": {
-        "task_id": "task-chat-native-a-20261015-1633",
+        "task_id": "task-chat-native-b-20261015-1638",
         "objective": "bounded synthetic string computation",
         "allowed_actions": [
           "simulate"
@@ -30,14 +30,18 @@
         "max_external_cost": 0,
         "artifact_policy": "public_synthetic"
       },
-      "created_unix": 1792074789,
-      "expires_unix": 1792096389,
-      "source_sha256": "678accb2408ba6beec667bda9b4afc8a9728113a95c5d709a85dc81b382a98e3",
+      "created_unix": 1792075108,
+      "expires_unix": 1792096708,
+      "source_sha256": "500496822bccb5b8f5d315dabfb7b82cce2945567bb3c1660a708af664364c2c",
       "privacy": "PUBLIC_SYNTHETIC"
     },
-    "payload": "synthetic:chat-native-a",
-    "action": "uppercase",
+    "payload": "synthetic:chat-native-b",
+    "action": "sha256",
     "code_ref": "1fafa8248900934ebcb54bbc737557a43ecb5a5f"
   },
-  "predecessor": null
+  "predecessor": {
+    "request_commit": "d77f903fd01a0327cfb3eb81727d9497dfd1c50f",
+    "provider_run_id": 38752566757,
+    "artifact_sha256": "62110af10cfac249b8dcf92f9efd970c7c49171981267b4d83faee0293e8ac93"
+  }
 }
