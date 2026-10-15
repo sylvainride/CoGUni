@@ -46,3 +46,35 @@ branch/source/identity spoof refusals. Its MissionClient mocks isolate transport
 routing; they are not confinement or live GitHub evidence. Existing runtime and
 isolation tests and exact-source CI must still pass; real provider/Chat recipe
 evidence is recorded separately.
+
+## Push admission and retained packets
+
+The presence of `request.json` alone no longer admits a mission. The adapter
+binds the injected GitHub push event's repository, sender, ref and `before/after`
+to the provider source and actual checkout. It inspects every Git transition in
+a forward linear range of at most 64 commits, fetching immutable history from
+the fixed public repository without credentials. Event file lists are not used.
+Only the existing three inert fixture paths may change in that range.
+
+An introduced or changed request enters the existing strict client, including
+TTL, source, target base, isolation and dependency validation. Any request edit
+within a multi-commit push counts, even if later reverted or deleted/restored.
+Writing identical bytes with the same ordinary file mode has no Git change.
+New malformed or stale requests fail; a simultaneous target edit cannot turn
+them into a skip. A retained packet still has its bounded ordinary Git blob,
+checkout bytes, packet shape and cumulative executable code pin checked, then
+returns `SKIPPED_UNCHANGED_REQUEST` with `business_executed: false`. This receipt
+has no business result, predecessor acceptance or new application authority. It
+does not assert that an older execution succeeded or that an effect occurred.
+
+Absence/deletion returns `NOT_SUBMITTED` after provenance/range checks. Branch
+creation without a packet is also neutral; copying a branch with an existing
+packet is ambiguous and refused. Submit a new request in a subsequent ordinary
+commit. Forced/nonancestor pushes, merge commits, missing history, overlong
+ranges and incomplete events fail closed. Required CI jobs still run and the
+mission concurrency policy is unchanged. No cross-run exactly-once store is
+introduced: explicit reruns of the original request run can recompute; target
+effects remain owner-controlled CAS with original-effect reconciliation on an
+unknown ACK. `tests/test_public_mission_admission.py` exercises real local Git
+trees and real owner admission, with worker execution mocked; provider and
+isolation evidence must be qualified separately.

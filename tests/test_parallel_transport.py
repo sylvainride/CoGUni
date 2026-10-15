@@ -50,8 +50,9 @@ class ParallelTransportTests(unittest.TestCase):
         out = self.root / "receipt.json"
         with patch.object(adapter, "ROOT", self.root), \
              patch.object(adapter, "provider_context", return_value=self.context), \
+             patch.object(adapter, "observe_push_transition", return_value={"state": "NEW_REQUEST"}), \
              patch.object(adapter, "verify_code_pin"), \
-             patch.object(adapter, "git", return_value=b""), \
+             patch.object(adapter, "git", side_effect=lambda *args: canonical(packet) if args[1].endswith(':' + adapter.REQUEST) else b""), \
              patch.object(adapter, "MissionClient") as constructor:
             client = constructor.return_value.__enter__.return_value
             client.execute.return_value = {"state": "COMPLETED", "artifact": {"accepted_for_gate": True}}
@@ -174,6 +175,7 @@ class ParallelTransportTests(unittest.TestCase):
                 return canonical(self.packet()) if args[1].endswith(":" + adapter.REQUEST) else b""
             with self.subTest(applied=applied, branch=branch), patch.object(adapter, "ROOT", self.root), \
                  patch.object(adapter, "provider_context", return_value=self.context), \
+                 patch.object(adapter, "observe_push_transition", return_value={"state": "NEW_REQUEST"}), \
                  patch.object(adapter, "verify_code_pin"), patch.object(adapter, "_fetch_commit"), \
                  patch.object(adapter, "git", side_effect=observed_git), \
                  patch.object(adapter.urllib.request, "build_opener", return_value=provider), \

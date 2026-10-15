@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 from universal.core import GuardError
 from universal.mission_cli import MissionClient
 from universal.mission_contracts import _read, canonical, fingerprint
+from tools.ci_repository_binding import bound_repository, read_event
 
 REQUEST = 'tests/fixtures_mvp_transport/request.json'
 TARGETS = 'tests/fixtures_mvp_transport/targets'
@@ -59,6 +60,64 @@ def _fetch_commit(sha):
     except subprocess.CalledProcessError:
         git('-c', 'core.hooksPath=/dev/null', 'fetch', '--no-tags', '--depth=1',
             'https://github.com/sylvainride/CoGUni.git', sha)
+
+
+def _request_entry(commit):
+    entry = git('ls-tree', commit, '--', REQUEST).decode().strip()
+    if entry and not re.fullmatch(r'100644 blob [0-9a-f]{40}\t' + re.escape(REQUEST), entry):
+        raise GuardError('request is not an ordinary Git file')
+    return entry
+
+
+def observe_push_transition(context):
+    """Bounded, linear provider range. No business admission or packet heuristic.
+
+    Inspect every commit, so delete/restore and edit/revert are new submissions.
+    Identical blob writes are unchanged; branch copies with packets are refused.
+    A missing/rewritten/overlong history is ambiguous, never a neutral skip.
+    """
+    try:
+        event = read_event(os.environ)
+        before, after = event['before'], event['after']
+        if (not bound_repository(event['repository']) or event['sender']['id'] != 265171248
+                or event['ref'] != context['ref'] or after != context['request_commit']
+                or not _SHA.fullmatch(before) or not _SHA.fullmatch(after)
+                or type(event['created']) is not bool
+                or event['deleted'] is not False or event['forced'] is not False
+                or event['head_commit']['id'] != after
+                or event['created'] != (before == '0' * 40)):
+            raise GuardError('push transition does not match provider source')
+        current = _request_entry(after)
+        if event['created']:
+            if current:
+                raise GuardError('branch creation with an existing request is ambiguous')
+            return {'state': 'NOT_SUBMITTED', 'before': before, 'after': after, 'commits': 0}
+        _fetch_commit(before)
+        # Checkout is depth=1 in Actions. Fetch only this fixed repository and
+        # immutable after SHA, at most 65 commits; never trust event file lists.
+        git('-c', 'core.hooksPath=/dev/null', 'fetch', '--no-tags', '--depth=65',
+            'https://github.com/sylvainride/CoGUni.git', after)
+        cursor, changed_request, count = after, False, 0
+        while cursor != before:
+            if count >= 64:
+                raise GuardError('push range exceeds bounded linear history')
+            header = git('cat-file', '-p', cursor).decode().split('\n\n', 1)[0]
+            parents = [line[7:] for line in header.splitlines() if line.startswith('parent ')]
+            if len(parents) != 1 or not _SHA.fullmatch(parents[0]):
+                raise GuardError('push ancestry is ambiguous')
+            parent = parents[0]
+            names = set(git('diff', '--no-renames', '--name-only', '-z', parent, cursor).decode().rstrip('\0').split('\0')) - {''}
+            if not names <= _ALLOWED_DIFF:
+                raise GuardError('push transition changed executable source')
+            changed_request |= _request_entry(parent) != _request_entry(cursor)
+            cursor, count = parent, count + 1
+        if not count:
+            raise GuardError('empty push transition')
+        return {'state': ('NOT_SUBMITTED' if not current else
+                          'NEW_REQUEST' if changed_request else 'SKIPPED_UNCHANGED_REQUEST'),
+                'before': before, 'after': after, 'commits': count}
+    except (KeyError, TypeError, AttributeError, ValueError, OSError, subprocess.SubprocessError) as error:
+        raise GuardError('push transition evidence unavailable or invalid') from error
 
 
 def verify_code_pin(request, context):
@@ -158,16 +217,27 @@ def run(request_path, out):
     context = provider_context()
     if request_path != REQUEST:
         raise GuardError('only fixed public fixture path accepted')
+    admission = observe_push_transition(context)
     path = ROOT / REQUEST
-    if not path.exists():
-        result = {**context, 'state': 'NOT_SUBMITTED', 'chat_connected': False}
+    if admission['state'] == 'NOT_SUBMITTED':
+        if path.exists() or path.is_symlink():
+            raise GuardError('checkout request differs from provider tree')
+        result = {**context, 'admission': admission, 'state': 'NOT_SUBMITTED', 'chat_connected': False}
     else:
         if path.is_symlink() or path.stat().st_size > 16384:
             raise GuardError('invalid request file')
-        packet = _read(path.read_bytes())
+        data = path.read_bytes()
+        if data != git('show', context['request_commit'] + ':' + REQUEST):
+            raise GuardError('checkout request differs from provider tree')
+        packet = _read(data)
         mode = _packet_mode(packet)
         req = packet['request']
         verify_code_pin(req, context)
+        if admission['state'] == 'SKIPPED_UNCHANGED_REQUEST':
+            result = {**context, 'admission': admission, 'state': 'SKIPPED_UNCHANGED_REQUEST',
+                      'request_sha256': fingerprint(packet), 'business_executed': False,
+                      'target_applied_by_coguni': False, 'chat_connected': False}
+            return _receipt(result, out)
         project = req['envelope']['project']['id']
         if mode is None and ((project == 'synthetic-A' and packet['predecessor'] is not None)
                              or (project == 'synthetic-B' and packet['predecessor'] is None)):
@@ -192,7 +262,7 @@ def run(request_path, out):
                 completed = client.execute(project, req['envelope']['mission_id'])
                 if completed['state'] != 'COMPLETED' or not completed['artifact']['accepted_for_gate']:
                     raise GuardError('isolated computation not verified')
-                result = {**context, 'transport': 'GITHUB_ACTIONS_PUBLIC_SYNTHETIC',
+                result = {**context, 'admission': admission, 'transport': 'GITHUB_ACTIONS_PUBLIC_SYNTHETIC',
                           'request_sha256': fingerprint(packet), 'predecessor': predecessor,
                           'result': completed, 'state': 'RESULT_READY',
                           'target_applied_by_coguni': False, 'chat_connected': False,
@@ -201,6 +271,10 @@ def run(request_path, out):
                           'observed_unix': int(time.time())}
                 if mode is not None:
                     result.update(schema_version=2, mode=mode)
+    return _receipt(result, out)
+
+
+def _receipt(result, out):
     out = Path(out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, sort_keys=True) + '\n')
     print(json.dumps({'public_mission_receipt': result}, sort_keys=True))

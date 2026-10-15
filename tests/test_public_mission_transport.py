@@ -149,6 +149,8 @@ class PublicMissionTransportTests(unittest.TestCase):
             path.write_bytes(canonical(packet))
             with self.subTest(project=project), patch.object(adapter, "ROOT", self.root), \
                  patch.object(adapter, "provider_context", return_value=self.context), \
+                 patch.object(adapter, "observe_push_transition", return_value={"state": "NEW_REQUEST"}), \
+                 patch.object(adapter, "git", return_value=canonical(packet)), \
                  patch.object(adapter, "verify_code_pin"), patch.object(adapter, "MissionClient") as client, \
                  self.assertRaises(GuardError):
                 adapter.run(adapter.REQUEST, self.root / "receipt.json")

@@ -30,6 +30,7 @@ OWNER_TESTS = (
     "tests.test_mission_executor.MissionExecutorOwnerTests",
     "tests.test_mission_cli.MissionCLIOwnerTests",
     "tests.test_public_mission_transport",
+    "tests.test_public_mission_admission",
     "tests.test_parallel_policy", "tests.test_parallel_scheduler",
     "tests.test_parallel_workflow", "tests.test_parallel_transport",
     # Cheap, no-untrusted-worker checks for the offline Chat bridge. These
