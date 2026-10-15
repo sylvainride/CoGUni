@@ -3,17 +3,17 @@
   "request": {
     "envelope": {
       "schema_version": 1,
-      "mission_id": "chat-pr14-parallel-a-20261015-1828",
-      "idempotency_key": "key-chat-pr14-parallel-a-20261015-1828",
+      "mission_id": "chat-pr14-dependent-d-20261015-1833",
+      "idempotency_key": "key-chat-pr14-dependent-d-20261015-1833",
       "project": {
         "kind": "local",
-        "id": "synthetic-A",
+        "id": "synthetic-B",
         "owner": "265171248",
-        "base_version": "48ca6d7477a51167b6c6d42206d424a27875905e345435b562f16357e0130457",
+        "base_version": "843ee679e2e40465b4bcb9bba8437168d2c831f96624daae780b70859fa919fe",
         "source_of_truth": "owner-synthetic-fixture"
       },
       "contract": {
-        "task_id": "task-chat-pr14-parallel-a-20261015-1828",
+        "task_id": "task-chat-pr14-dependent-d-20261015-1833",
         "objective": "bounded synthetic string computation",
         "allowed_actions": [
           "simulate"
@@ -30,15 +30,19 @@
         "max_external_cost": 0,
         "artifact_policy": "public_synthetic"
       },
-      "created_unix": 1792081696,
-      "expires_unix": 1792103296,
-      "source_sha256": "8f712785ee5c972c22b6b2af4da7dc62612b330a6b2722ac8a998283bc2bdf77",
+      "created_unix": 1792082021,
+      "expires_unix": 1792103621,
+      "source_sha256": "24e16722603eec6ba579a165f9a2fd28b0ee16e2c6cffa95ba87e3910def64f5",
       "privacy": "PUBLIC_SYNTHETIC"
     },
-    "payload": "synthetic:coguni-parallel-a-20261015-1825",
-    "action": "uppercase",
+    "payload": "synthetic:coguni-dependent-d-20261015-1833",
+    "action": "sha256",
     "code_ref": "ee746e7465f125d5e7d251e8cfdb58545fa7b099"
   },
-  "predecessor": null,
-  "mode": "INDEPENDENT"
+  "predecessor": {
+    "request_commit": "2b77567838f3f552caca916dee269636a8c4f27d",
+    "provider_run_id": 38769389859,
+    "artifact_sha256": "46b7c2c8d3739b69cdeeb63e99fd2a795707b4fe42e60baa3cef451dc93bb6e7"
+  },
+  "mode": "DEPENDENT"
 }
