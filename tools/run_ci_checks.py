@@ -37,7 +37,7 @@ OWNER_TESTS = (
     "tests.test_mission_redaction", "tests.test_mission_crash_recovery",
     "tests.test_mission_projects", "tests.test_mission_artifacts",
     "tests.test_mission_adversarial_matrix",
-    "tests.test_continuity_source_races",
+    "tests.test_continuity_source_races", "tests.test_mission_confined_worker",
 ) + tuple("tests.test_generative_v8.GenerativeTests." + name for name in (
     "test_strict_default_still_requires_sha_and_registered_action",
     "test_generative_requires_mode_policy_action_and_absent_expected_sha",
