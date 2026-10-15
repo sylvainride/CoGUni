@@ -1,0 +1,44 @@
+{
+  "schema_version": 2,
+  "request": {
+    "envelope": {
+      "schema_version": 1,
+      "mission_id": "chat-pr14-parallel-b-20261015-1828",
+      "idempotency_key": "key-chat-pr14-parallel-b-20261015-1828",
+      "project": {
+        "kind": "local",
+        "id": "synthetic-B",
+        "owner": "265171248",
+        "base_version": "843ee679e2e40465b4bcb9bba8437168d2c831f96624daae780b70859fa919fe",
+        "source_of_truth": "owner-synthetic-fixture"
+      },
+      "contract": {
+        "task_id": "task-chat-pr14-parallel-b-20261015-1828",
+        "objective": "bounded synthetic string computation",
+        "allowed_actions": [
+          "simulate"
+        ],
+        "forbidden_actions": [
+          "publish"
+        ],
+        "criteria": [
+          "exact owner output and independent target readback"
+        ],
+        "dependencies": [],
+        "max_attempts": 2,
+        "max_duration_seconds": 60,
+        "max_external_cost": 0,
+        "artifact_policy": "public_synthetic"
+      },
+      "created_unix": 1792081696,
+      "expires_unix": 1792103296,
+      "source_sha256": "6b4ab2cd10e505a6c41794cebf8c65ee71d8b1a39173e93da4114a452540b75e",
+      "privacy": "PUBLIC_SYNTHETIC"
+    },
+    "payload": "synthetic:coguni-parallel-b-20261015-1825",
+    "action": "sha256",
+    "code_ref": "ee746e7465f125d5e7d251e8cfdb58545fa7b099"
+  },
+  "predecessor": null,
+  "mode": "INDEPENDENT"
+}
