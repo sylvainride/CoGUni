@@ -50,10 +50,28 @@ class HandoffTests(unittest.TestCase):
                                  key='start', ttl=60)
         recorded = self.db.get(self.task)
         wire = self.snapshot()
+        self.now[0] = 180
         self.assertEqual(import_offline_handoff(self.db, wire, now_unix=180).state, 'OBSERVE_ONLY')
         self.assertEqual(self.db.get(self.task), recorded)
+        self.now[0] = 210
         self.assertEqual(import_offline_handoff(self.db, wire, now_unix=210).state, 'OWNER_RECOVERY_REQUIRED')
         self.assertEqual(self.db.get(self.task), recorded)
+
+    def test_untrusted_handoff_clock_cannot_falsify_owner_lease(self):
+        self.row = self.db.claim(self.task, 'owner', 'offline_fixture', expected_revision=self.row['revision'],
+                                 key='start', ttl=60)
+        wire = self.snapshot()
+        # The durable journal clock, not a caller-supplied message timestamp,
+        # controls the lease. Premature expiry must never be inferred.
+        self.now[0] = 180
+        before = self.db.get(self.task)
+        self.assertEqual(import_offline_handoff(self.db, wire, now_unix=9999).state, 'OBSERVE_ONLY')
+        # Conversely, an outdated Chat timestamp must not hide actual expiry.
+        self.now[0] = 210
+        self.assertEqual(import_offline_handoff(self.db, wire, now_unix=151).state,
+                         'OWNER_RECOVERY_REQUIRED')
+        self.assertEqual(self.db.get(self.task), before)
+        self.assertTrue(self.db.verify_chain())
 
     def test_restart_same_journal_revalidates(self):
         wire = self.snapshot()

@@ -104,7 +104,11 @@ def import_offline_handoff(journal, wire, *, now_unix):
     if not journal._sources_current(row['contract']):
         return ResumeHint('BLOCKED_SOURCE', 'owner source pin changed; do not resume', cursor)
     if row['state'] == 'RUNNING':
-        if row['lease_until'] is not None and now_unix < row['lease_until']:
+        # The message timestamp is untrusted handoff metadata, not the owner
+        # lease clock. Use the journal's own controlled clock (also used by
+        # claim/recover), so a forged/stale Chat time cannot change the hint.
+        owner_now = journal._now()
+        if row['lease_until'] is not None and owner_now < row['lease_until']:
             return ResumeHint('OBSERVE_ONLY', 'preserve healthy owner lease; read-only status', cursor)
         return ResumeHint('OWNER_RECOVERY_REQUIRED', 'lease expired; original owner must fence and recover', cursor)
     if row['state'] in {'READY', 'PAUSED'}:
