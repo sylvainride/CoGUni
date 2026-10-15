@@ -30,8 +30,11 @@ The preflight permits that stacked base only for PR #14 from
 `work/parallel-missions-20261015`, with base commit
 `1fafa8248900934ebcb54bbc737557a43ecb5a5f`. Both main and stacked PRs now require
 the owner actor/author, same immutable head/base repository identity, the injected
-PR event and a fresh public read of the PR. Their exact head/base/merge SHAs must
-agree with the checkout's two ordered merge parents. Forks, another stacked PR,
+PR event and a fresh public read of the PR. Their exact head/base SHAs must
+agree with the checkout's two ordered merge parents, and the fresh API merge
+SHA must equal the Actions checkout SHA. The webhook's merge SHA hint can refer
+to an earlier merge during synchronize and is logged only as an observation.
+Forks, another stacked PR,
 base movement, a stale event or changed merge are refused. A later base change
 requires explicit policy review and fresh CI; a green observation is bound to
 its recorded commits, not to future branch tips. API unavailability fails closed.

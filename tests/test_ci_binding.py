@@ -124,6 +124,15 @@ class TestCIBinding(unittest.TestCase):
             pr["number"] = 15
         with self.assertRaises(ValueError):
             validate_context(value, "a" * 40, **evidence)
+
+    def test_synchronize_event_merge_hint_is_not_the_actions_merge_source(self):
+        for hint in (None, "c" * 40):
+            value, evidence = pr_evidence(STACKED_BASE)
+            evidence["payload"]["pull_request"]["merge_commit_sha"] = hint
+            self.assertEqual(validate_context(value, "a" * 40, **evidence)["checkout_sha"], "a" * 40)
+            evidence["observed_pr"]["merge_commit_sha"] = hint
+            with self.assertRaises(ValueError):
+                validate_context(value, "a" * 40, **evidence)
         value, evidence = pr_evidence(STACKED_BASE)
         value["GITHUB_HEAD_REF"] = "work/other"
         for pr in (evidence["payload"]["pull_request"], evidence["observed_pr"]):

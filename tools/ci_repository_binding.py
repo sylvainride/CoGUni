@@ -54,7 +54,7 @@ def bound_repository(repo):
 
 def _pr_identity(pr):
     return (pr["number"], pr["state"], pr["base"]["ref"], pr["base"]["sha"],
-            pr["head"]["ref"], pr["head"]["sha"], pr["merge_commit_sha"])
+            pr["head"]["ref"], pr["head"]["sha"])
 
 
 def validate_pr(context, payload, observed, merge_parents):
@@ -73,14 +73,18 @@ def validate_pr(context, payload, observed, merge_parents):
                     or item["base"]["ref"] != context["GITHUB_BASE_REF"]
                     or item["head"]["ref"] != context["GITHUB_HEAD_REF"]
                     or not re.fullmatch(r"(?:work|bootstrap)/[A-Za-z0-9._/-]+", item["head"]["ref"])
-                    or any(not re.fullmatch(r"[0-9a-f]{40}", item[side]["sha"]) for side in ("base", "head"))
-                    or item["merge_commit_sha"] != context["GITHUB_SHA"]):
+                    or any(not re.fullmatch(r"[0-9a-f]{40}", item[side]["sha"]) for side in ("base", "head"))):
                 raise ValueError("pull request refs or repository are not qualified")
             if item["base"]["ref"] == STACKED_BASE and (
                     number != 14 or item["head"]["ref"] != "work/parallel-missions-20261015"
                     or item["base"]["sha"] != STACKED_BASE_SHA):
                 raise ValueError("stacked pull request is outside the explicit approval")
-        if (_pr_identity(pr) != _pr_identity(observed)
+        # On synchronize, the webhook's merge_commit_sha can still describe
+        # the previous merge (or be null). It is not the Actions merge source.
+        # Bind the event's exact base/head to the fresh API and actual parents;
+        # only the fresh API's generated merge must equal GITHUB_SHA.
+        if (observed["merge_commit_sha"] != context["GITHUB_SHA"]
+                or _pr_identity(pr) != _pr_identity(observed)
                 or list(merge_parents) != [pr["base"]["sha"], pr["head"]["sha"]]):
             raise ValueError("pull request changed or virtual merge parents differ")
         return {"pr_number": number, "base_ref": pr["base"]["ref"], "base_sha": pr["base"]["sha"],
@@ -134,6 +138,12 @@ def main():
                 ["git", "cat-file", "-p", sha], cwd=root, text=True).split("\n\n", 1)[0].splitlines()
                 if line.startswith("parent ")]
             evidence = dict(payload=payload, observed_pr=public_pr(int(ref.split("/")[2])), merge_parents=parents)
+            def reported_sha(value):
+                return value if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value) else None
+            print(json.dumps({"pr_merge_observation": {
+                "event_reported_merge_sha": reported_sha(payload.get("pull_request", {}).get("merge_commit_sha")),
+                "provider_merge_sha": reported_sha(evidence["observed_pr"].get("merge_commit_sha")),
+                "checkout_sha": sha, "parents": parents}}, sort_keys=True))
         observation = validate_context(os.environ, sha, **evidence)
         observation["checkout_tree"] = subprocess.check_output(
             ["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip()
