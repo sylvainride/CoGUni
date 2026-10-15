@@ -22,11 +22,14 @@ class MissionArtifactTests(unittest.TestCase):
         self.r = receipt()
         self.r['artifact_sha256'] = hashlib.sha256(self.data).hexdigest()
 
-    def check(self, m=None, r=None, *, root=None, path=None, max_bytes=1024):
+    def check(self, m=None, r=None, *, root=None, path=None, max_bytes=1024,
+              expected_run_id='run-1', expected_project_version='v1'):
         return inspect_synthetic_artifact(canonical(self.m if m is None else m),
                                            canonical(self.r if r is None else r),
                                            now_unix=150, root=str(self.root if root is None else root),
-                                           path=str(self.file if path is None else path), max_bytes=max_bytes)
+                                           path=str(self.file if path is None else path), max_bytes=max_bytes,
+                                           expected_run_id=expected_run_id,
+                                           expected_project_version=expected_project_version)
 
     def test_matching_bytes_are_integrity_only_never_owner_pass(self):
         result = self.check()
@@ -34,6 +37,16 @@ class MissionArtifactTests(unittest.TestCase):
         self.assertEqual(result.size, len(self.data))
         self.assertFalse(result.accepted)
         self.assertFalse(result.application_authorized)
+
+    def test_owner_run_and_project_version_must_bind_exactly(self):
+        with self.assertRaises(MissionContractError):
+            self.check(expected_run_id='run-B')
+        with self.assertRaises(MissionContractError):
+            self.check(expected_project_version='other-version')
+        forged = copy.deepcopy(self.r)
+        forged['run_id'] = 'run-B'
+        with self.assertRaises(MissionContractError):
+            self.check(r=forged)
 
     def test_refuse_project_source_and_claimed_pass(self):
         for field, value in (('project_id', 'fixture-B'), ('source_sha256', 'b'*64),

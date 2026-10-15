@@ -68,10 +68,17 @@ def _secure_read(root, relative, *, max_bytes):
 
 
 def inspect_synthetic_artifact(raw_mission, raw_receipt, *, now_unix, root, path,
+                               expected_run_id, expected_project_version,
                                max_bytes=MAX_ARTIFACT_BYTES):
     """Verify exact project/source linkage + bytes; never promote worker PASS."""
     mission = decode_mission(raw_mission, now_unix=now_unix)
     receipt = decode_receipt(raw_receipt)
+    if (type(expected_run_id) is not str or not 1 <= len(expected_run_id) <= 96
+            or type(expected_project_version) is not str
+            or not 1 <= len(expected_project_version) <= 160
+            or receipt['run_id'] != expected_run_id
+            or mission['project']['base_version'] != expected_project_version):
+        raise MissionContractError('owner run or project version mismatch')
     if (mission['project']['kind'] != 'local' or mission['privacy'] != 'PUBLIC_SYNTHETIC'
             or receipt['mission_id'] != mission['mission_id']
             or receipt['project_id'] != mission['project']['id']
