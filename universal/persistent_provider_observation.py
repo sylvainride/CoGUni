@@ -41,7 +41,7 @@ class ProviderObservation:
                               ("run_id", 10**15 - 1), ("attempt", 100),
                               ("observed_unix", 2**63 - 1)):
             value = getattr(self, name)
-            if type(value) is not int or not 0 <= value <= maximum or (name != "observed_unix" and value == 0):
+            if type(value) is not int or not 0 <= value <= maximum or value == 0:
                 raise GuardError("invalid provider numeric identity")
         if (type(self.commit) is not str or not _SHA40.fullmatch(self.commit)
                 or type(self.code_ref) is not str or not _SHA40.fullmatch(self.code_ref)
@@ -49,6 +49,7 @@ class ProviderObservation:
                 or type(self.branch) is not str or not _BRANCH.fullmatch(self.branch)):
             raise GuardError("invalid provider source/ref pin")
         if (type(self.status) is not str or self.status not in _STATUSES
+                or (self.conclusion is not None and type(self.conclusion) is not str)
                 or self.conclusion not in _CONCLUSIONS
                 or (self.status != "completed" and self.conclusion is not None)
                 or (self.status == "completed" and self.conclusion is None)):
