@@ -100,6 +100,17 @@ class HandoffTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(GuardError):
                 import_offline_handoff(self.db, canonical(tampered), now_unix=150)
 
+    def test_unpaired_unicode_and_oversize_message_rejected_before_owner_read(self):
+        # Neither an invalid scalar nor an oversized handoff string may raise
+        # an unhandled codec error or cause any journal mutation.
+        initial = self.db.get(self.task)
+        for raw in ('\ud800', '\udfff', 'a' * 8193, b'a' * 8193):
+            with self.subTest(value_type=type(raw).__name__, length=len(raw)):
+                with self.assertRaises(GuardError):
+                    import_offline_handoff(self.db, raw, now_unix=150)
+        self.assertEqual(self.db.get(self.task), initial)
+        self.assertTrue(self.db.verify_chain())
+
     def test_source_drift_prevents_resume(self):
         wire = self.snapshot()
         self.src.write_text('changed', encoding='utf-8')

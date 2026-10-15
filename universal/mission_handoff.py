@@ -75,8 +75,15 @@ def import_offline_handoff(journal, wire, *, now_unix):
     _integer(now_unix)
     if type(wire) not in (str, bytes):
         raise GuardError('handoff must be JSON text', 'BLOCK')
-    raw = wire.encode('utf-8') if type(wire) is str else wire
-    if not 0 < len(raw) <= _MAX:
+    # Reject oversized text *before* encoding it; untrusted Unicode must be
+    # rejected as an explicit handoff refusal, not an uncaught codec error.
+    if not 0 < len(wire) <= _MAX:
+        raise GuardError('handoff size invalid', 'BLOCK')
+    try:
+        raw = wire.encode('utf-8') if type(wire) is str else wire
+    except UnicodeError as exc:
+        raise GuardError('handoff contains invalid Unicode', 'BLOCK') from exc
+    if len(raw) > _MAX:
         raise GuardError('handoff size invalid', 'BLOCK')
     try:
         obj = _read(raw)

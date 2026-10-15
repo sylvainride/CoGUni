@@ -13,7 +13,11 @@ from .mission_liveness import Observation, classify
 def _tag(run_id):
     if type(run_id) is not str or not 1 <= len(run_id) <= 96:
         raise MissionContractError('invalid run identity')
-    return hashlib.sha256(run_id.encode('utf-8')).hexdigest()[:16]
+    try:
+        identity = run_id.encode('utf-8')
+    except UnicodeError as exc:
+        raise MissionContractError('invalid Unicode in run identity') from exc
+    return hashlib.sha256(identity).hexdigest()[:16]
 
 
 def redacted_receipt(raw):

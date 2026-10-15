@@ -41,6 +41,13 @@ class RedactionTests(unittest.TestCase):
         self.assertEqual(result['reported_liveness'], 'UNKNOWN_EFFECT')
         self.assertFalse(result['effect_retry_authorized'])
 
+    def test_unpaired_unicode_identity_yields_contract_error(self):
+        for raw in ('run-\ud800', 'run-\udfff'):
+            with self.subTest(raw=ascii(raw)):
+                observation = Observation(now_unix=150, run_id=raw, fence=1)
+                with self.assertRaises(MissionContractError):
+                    redacted_liveness(observation)
+
     def test_bad_receipt_and_forged_observation_denied(self):
         with self.assertRaises(MissionContractError):
             redacted_receipt(b'{"approved":true}')
