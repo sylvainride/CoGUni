@@ -16,8 +16,9 @@ class MissionProjectTests(unittest.TestCase):
         return profile_from_mission(canonical(envelope), now_unix=150)
 
     def cap(self, profile, **changes):
-        value = dict(project_id=profile.project_id, base_version=profile.base_version,
-                     source_sha256=profile.source_sha256, observed_unix=100,
+        value = dict(project_id=profile.project_id, kind=profile.kind, owner=profile.owner,
+                     base_version=profile.base_version, source_sha256=profile.source_sha256,
+                     contract_sha256=profile.contract_sha256, observed_unix=100,
                      expires_unix=200, read_permission=True, network_permission=True,
                      budget_calls=1)
         value.update(changes)
@@ -59,6 +60,16 @@ class MissionProjectTests(unittest.TestCase):
             self.assertEqual(preview_read_route(p, replace(c, **override), now_unix=150, planner_enabled=True).route, 'BLOCK')
         for now in (99, 200, True, -1):
             self.assertEqual(preview_read_route(p, c, now_unix=now, planner_enabled=True).route, 'BLOCK')
+
+    def test_same_id_different_owner_kind_or_contract_cannot_inherit_capabilities(self):
+        original = self.profile()
+        c = self.cap(original, offline_possible=True)
+        different_owner = replace(original, owner='foreign-owner')
+        different_kind = replace(original, kind='github')
+        different_contract = replace(original, contract_sha256='b'*64)
+        for other in (different_owner, different_kind, different_contract):
+            with self.subTest(profile=other):
+                self.assertEqual(preview_read_route(other, c, now_unix=150, planner_enabled=True).route, 'BLOCK')
 
     def test_private_secret_or_missing_permission_denied(self):
         p = self.profile()

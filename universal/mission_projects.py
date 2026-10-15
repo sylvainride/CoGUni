@@ -29,10 +29,13 @@ class ProjectProfile:
 
 @dataclass(frozen=True)
 class ReadCapability:
-    """Non-authoritative bounded observation tied to an exact project version."""
+    """Non-authoritative bounded observation tied to owner/project/contract."""
     project_id: str
+    kind: str
+    owner: str
     base_version: str
     source_sha256: str
+    contract_sha256: str
     observed_unix: int
     expires_unix: int
     api_declared: bool = False
@@ -57,10 +60,15 @@ class ReadCapability:
     def __post_init__(self):
         if type(self.project_id) is not str or not 1 <= len(self.project_id) <= 160:
             raise ValueError('invalid capability project')
+        if type(self.kind) is not str or self.kind not in {'local', 'floot', 'github', 'other'}:
+            raise ValueError('invalid project kind')
+        if type(self.owner) is not str or not 1 <= len(self.owner) <= 160:
+            raise ValueError('invalid capability owner')
         if type(self.base_version) is not str or not 1 <= len(self.base_version) <= 160:
             raise ValueError('invalid capability version')
-        if type(self.source_sha256) is not str or not _SHA.fullmatch(self.source_sha256):
-            raise ValueError('invalid capability source SHA')
+        if (type(self.source_sha256) is not str or not _SHA.fullmatch(self.source_sha256)
+                or type(self.contract_sha256) is not str or not _SHA.fullmatch(self.contract_sha256)):
+            raise ValueError('invalid capability source/contract SHA')
         for name in ('observed_unix', 'expires_unix', 'budget_calls'):
             val = getattr(self, name)
             if type(val) is not int or not 0 <= val <= 2**63 - 1:
@@ -68,7 +76,7 @@ class ReadCapability:
         if self.budget_calls > 10**6 or self.expires_unix - self.observed_unix > 3600 or self.expires_unix <= self.observed_unix:
             raise ValueError('unbounded capability observation')
         for name in self.__dataclass_fields__:
-            if name in {'project_id', 'base_version', 'source_sha256', 'observed_unix', 'expires_unix', 'budget_calls'}:
+            if name in {'project_id', 'kind', 'owner', 'base_version', 'source_sha256', 'contract_sha256', 'observed_unix', 'expires_unix', 'budget_calls'}:
                 continue
             if type(getattr(self, name)) is not bool:
                 raise ValueError('invalid capability boolean')
@@ -100,9 +108,11 @@ def preview_read_route(profile, observation, *, now_unix, planner_enabled=False)
         return ReadPlan('BLOCK', 'typed project/capability required')
     if type(now_unix) is not int or type(planner_enabled) is not bool or now_unix < 0:
         return ReadPlan('BLOCK', 'invalid observation time or planner flag')
-    if (profile.project_id, profile.base_version, profile.source_sha256) != (
-            observation.project_id, observation.base_version, observation.source_sha256):
-        return ReadPlan('BLOCK', 'foreign project, stale source or version')
+    if (profile.project_id, profile.kind, profile.owner, profile.base_version,
+            profile.source_sha256, profile.contract_sha256) != (
+            observation.project_id, observation.kind, observation.owner,
+            observation.base_version, observation.source_sha256, observation.contract_sha256):
+        return ReadPlan('BLOCK', 'foreign owner/project, stale source, contract or version')
     if not observation.observed_unix <= now_unix < observation.expires_unix:
         return ReadPlan('BLOCK', 'stale or future capability observation')
     if profile.privacy != 'PUBLIC_SYNTHETIC' or observation.contains_secret:
