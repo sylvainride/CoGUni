@@ -16,7 +16,7 @@ from universal.continuity import ContinuityJournal
 from universal.core import GuardError
 from universal.parallel_policy import Access, Work
 from universal.parallel_scheduler import OwnerScheduler
-from universal.persistent_provider_observation import ProviderObservation
+from universal.persistent_provider_observation import ProviderObservation, UnavailableReadback
 from universal.persistent_resume import export_resume, validate_resume
 from universal.persistent_supervisor import HealthReadback, PassiveSupervisor
 
@@ -317,6 +317,121 @@ with ContinuityJournal(sys.argv[1], clock=lambda: 100.0) as j:
             self.assertEqual(p.stdout.strip(), "OBSERVE_ONLY:A")
         self.assertEqual(self.scheduler.ready()["remaining_runs"], 1)
         self.assertTrue(self.journal.verify_chain())
+
+
+    def test_provider_read_unavailable_403_404_429_never_authorizes_effect(self):
+        self.submit()
+        self.reserve()
+        before = self.scheduler.status("A")
+        for reason in ("RATE_LIMIT", "ACCESS_DENIED", "NOT_FOUND", "UNAVAILABLE"):
+            def unavailable(*_):
+                return UnavailableReadback(reason, observed_unix=int(self.now[0]))
+            verdict = self.supervisor.observe_once(
+                "A", provider_reader=unavailable, now_unix=int(self.now[0]))
+            self.assertEqual((verdict.action, verdict.liveness), ("HANDOFF", "UNKNOWN"))
+            self.assertFalse(verdict.execution_authorized)
+            self.assertFalse(verdict.may_cancel)
+            self.assertFalse(verdict.may_retry_write)
+            self.assertEqual(self.scheduler.status("A"), before)
+        self.assertEqual(self.scheduler.ready()["polls_left"], 3)
+        self.assertEqual(self.journal.get("ps-job-A")["attempts"], 1)
+        for changes in (("WRONG", 100), ("RATE_LIMIT", 0), ("RATE_LIMIT", True),
+                        (False, 100)):
+            with self.subTest(changes=changes), self.assertRaises(GuardError):
+                UnavailableReadback(*changes)
+        for bad_time in (101, 1):
+            with self.subTest(observed_unix=bad_time), self.assertRaises(GuardError):
+                self.supervisor.observe_once("A", provider_reader=lambda *_: UnavailableReadback(
+                    "RATE_LIMIT", bad_time), now_unix=100 if bad_time == 101 else 4000)
+
+    def test_worker_supplied_success_json_cannot_be_provider_reader(self):
+        self.submit()
+        self.reserve()
+        before = self.scheduler.status("A")
+        with self.assertRaises(GuardError):
+            self.supervisor.observe_once(
+                "A", provider_reader=lambda *_: {"worker_pass": True,
+                                                   "provider_trusted": True},
+                now_unix=100)
+        self.assertEqual(before, self.scheduler.status("A"))
+        self.assertEqual(self.scheduler.ready()["polls_left"], 3)
+
+    def test_silent_queued_job_preserves_original_owner_reservation(self):
+        self.submit()
+        self.reserve()
+        verdict = self.tick(self.provider(status="queued"))
+        self.assertEqual(verdict.liveness, "SILENT_RUNNING")
+        self.assertFalse(verdict.may_cancel)
+        self.assertFalse(verdict.may_retry_write)
+        self.assertEqual(self.scheduler.status("A")["state"], "IN_FLIGHT")
+
+    def test_out_of_order_independent_runs_preserve_task_identity(self):
+        self.submit("A")
+        self.submit("B")
+        self.reserve("A")
+        self.reserve("B")
+        samples = {
+            "A": self.provider("read-a", "A", run_id=10001),
+            "B": self.provider("read-b", "B", run_id=20002),
+        }
+        def reader(task_id, status):
+            provider = samples[task_id]
+            return provider, HealthReadback(provider.run_id, status["fence"], 100)
+        results = self.supervisor.tick(("B", "A"), provider_reader=reader,
+                                       now_unix=100, max_observations=2)
+        self.assertEqual(tuple(r.task_id for r in results), ("B", "A"))
+        self.assertTrue(all(r.liveness == "SILENT_RUNNING" for r in results))
+        self.assertEqual(self.scheduler.status("A")["provider"]["run_id"], 10001)
+        self.assertEqual(self.scheduler.status("B")["provider"]["run_id"], 20002)
+        self.assertEqual(self.scheduler.ready()["polls_left"], 1)
+
+    def test_batch_budget_reads_only_first_eligible_task(self):
+        self.submit("A")
+        self.submit("B")
+        self.reserve("A")
+        self.reserve("B")
+        calls = []
+        def reader(task_id, status):
+            calls.append(task_id)
+            provider = self.provider("read-" + task_id, task_id)
+            return provider, None
+        verdicts = self.supervisor.tick(("B", "A"), provider_reader=reader,
+                                        now_unix=100, max_observations=1)
+        self.assertEqual(tuple(v.task_id for v in verdicts), ("B",))
+        self.assertEqual(calls, ["B"])
+        self.assertIsNone(self.scheduler.status("A")["provider"])
+        self.assertEqual(self.scheduler.ready()["polls_left"], 2)
+
+    def test_false_heartbeat_run_fence_and_future_refused(self):
+        self.submit()
+        self.reserve()
+        provider = self.provider()
+        before = self.scheduler.status("A")
+        for mismatch in (
+            HealthReadback(77777, before["fence"], 100),
+            HealthReadback(provider.run_id, before["fence"] + 1, 100),
+            HealthReadback(provider.run_id, before["fence"], 101),
+        ):
+            with self.subTest(heartbeat=mismatch), self.assertRaises(GuardError):
+                self.supervisor.observe_once(
+                    "A", provider_reader=lambda *_: (provider, mismatch),
+                    now_unix=100)
+            self.assertEqual(self.scheduler.status("A"), before)
+        self.assertEqual(self.scheduler.ready()["polls_left"], 3)
+
+    def test_original_journal_replacement_cannot_import_resume(self):
+        self.submit()
+        wire = export_resume(self.scheduler, ("A",))
+        old = self.journal.identity
+        self._close()
+        self.db_path.unlink()
+        self.journal = ContinuityJournal(self.db_path, clock=lambda: self.now[0])
+        self.scheduler = self.open_scheduler()
+        self.assertNotEqual(old, self.journal.identity)
+        with self.assertRaises(GuardError):
+            validate_resume(self.scheduler, wire)
+        self.assertEqual(self.scheduler.handoff()["tasks"], [])
+
 
 
 if __name__ == "__main__":
