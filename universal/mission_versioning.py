@@ -29,10 +29,16 @@ def _validated_records(records, now_unix):
         kind, value = item['kind'], item['value']
         if type(kind) is not str or kind not in _KINDS or type(value) is not dict:
             raise MissionContractError('invalid record kind or body')
+        # JSON received from a bundle may contain escaped unpaired Unicode.
+        # Normalize encoding failures to the explicit untrusted-input error.
+        try:
+            wire = canonical(value)
+        except (UnicodeError, ValueError, TypeError, RecursionError) as exc:
+            raise MissionContractError('invalid canonical record') from exc
         if kind == 'mission':
-            checked = decode_mission(canonical(value), now_unix=now_unix)
+            checked = decode_mission(wire, now_unix=now_unix)
         else:
-            checked = _KINDS[kind](canonical(value))
+            checked = _KINDS[kind](wire)
         key = checked['mission_id']
         pin = checked['source_sha256']
         if key in mission_pins and mission_pins[key] != pin:
@@ -93,7 +99,13 @@ def import_offline_bundle(raw, *, now_unix, existing_mission_ids=()):
             or value['format'] != 'coguni-offline-fixture-bundle-v1'
             or value['authority'] != 'NONE'):
         raise MissionContractError('unsupported bundle version or authority')
-    if type(value['digest']) is not str or value['digest'] != fingerprint({k:v for k,v in value.items() if k != 'digest'}):
+    if type(value['digest']) is not str:
+        raise MissionContractError('bundle integrity mismatch')
+    try:
+        actual_digest = fingerprint({k:v for k,v in value.items() if k != 'digest'})
+    except (UnicodeError, ValueError, TypeError, RecursionError) as exc:
+        raise MissionContractError('invalid canonical bundle') from exc
+    if value['digest'] != actual_digest:
         raise MissionContractError('bundle integrity mismatch')
     records = _validated_records(value['records'], now_unix)
     if type(existing_mission_ids) not in (set, frozenset, tuple, list) or any(type(x) is not str for x in existing_mission_ids):

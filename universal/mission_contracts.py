@@ -183,13 +183,15 @@ def _event(value):
     _one(value["proof_kind"], {"OWNER_JOURNAL", "AUTH_PROVIDER", "TRUSTED_SUPERVISOR", "EXTERNAL_RECEIPT", "UNTRUSTED_WORKER"})
     if value["proof_kind"] == "UNTRUSTED_WORKER" and value["state"] in {"ACCEPTED", "APPLIED"}:
         raise MissionContractError("worker cannot attest acceptance or effect")
+    # Validate all attacker-controlled text before canonical hashing; an
+    # unpaired Unicode surrogate must be a contract refusal, not a codec crash.
+    if "reason_code" in value:
+        _string(value["reason_code"], 1, 120)
     if "event_digest" in value:
         _sha(value["event_digest"])
         body = {key: val for key, val in value.items() if key != "event_digest"}
         if value["event_digest"] != fingerprint(body):
             raise MissionContractError("event digest mismatch")
-    if "reason_code" in value:
-        _string(value["reason_code"], 1, 120)
 
 
 def canonical(value):

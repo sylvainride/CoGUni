@@ -65,6 +65,16 @@ class MissionVersioningTests(unittest.TestCase):
         with self.assertRaises(MissionContractError):
             self.out(old)
 
+    def test_unpaired_unicode_scalar_rejected_as_contract_error(self):
+        import_bad = json.loads(self.out())
+        import_bad['records'][0]['value']['contract']['objective'] = '\ud800'
+        with self.assertRaises(MissionContractError):
+            import_offline_bundle(json.dumps(import_bad), now_unix=150)
+        export_bad = copy.deepcopy(self.items)
+        export_bad[0]['value']['contract']['objective'] = '\ud800'
+        with self.assertRaises(MissionContractError):
+            self.out(export_bad)
+
     def test_expiry_fails_on_import_even_with_intact_digest(self):
         wire = self.out()
         with self.assertRaises(MissionContractError):

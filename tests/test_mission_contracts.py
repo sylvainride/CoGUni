@@ -95,6 +95,13 @@ class MissionContractsTests(unittest.TestCase):
             with self.subTest(patch=patch), self.assertRaises(MissionContractError):
                 decode_receipt(canonical(dict(value, **patch)))
 
+    def test_event_unpaired_surrogate_is_contract_error_not_codec_crash(self):
+        bad = event()
+        bad['reason_code'] = '\ud800'
+        bad['event_digest'] = '0' * 64
+        with self.assertRaises(MissionContractError):
+            decode_event(json.dumps(bad))
+
     def test_events_handoff_is_not_completion(self):
         value = event()
         self.assertEqual(decode_event(canonical(value)), value)
