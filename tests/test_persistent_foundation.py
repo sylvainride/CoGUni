@@ -120,7 +120,8 @@ class PersistentFoundationTests(unittest.TestCase):
 
     def test_foreign_owner_repo_ref_and_observation_clock_refused_without_mutation(self):
         self.submit()
-        before = self.reserve()
+        self.reserve()
+        before = self.scheduler.status("A")
         for changes in (
             {"repository_id": 55}, {"actor_id": 56}, {"code_ref": "e" * 40},
             {"request_sha256": "e" * 64},
@@ -271,7 +272,8 @@ class PersistentFoundationTests(unittest.TestCase):
 
     def test_expired_lease_is_not_recovered_by_tick(self):
         self.submit()
-        state = self.reserve()
+        self.reserve()
+        state = self.scheduler.status("A")
         self.now[0] = state["lease_until"]
         verdict = self.tick(self.provider())
         self.assertEqual(verdict.action, "HANDOFF")
