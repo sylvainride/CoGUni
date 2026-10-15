@@ -9,10 +9,10 @@ import re
 
 from .core import GuardError
 
-_IDENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}\\Z")
-_SHA40 = re.compile(r"[0-9a-f]{40}\\Z")
-_SHA64 = re.compile(r"[0-9a-f]{64}\\Z")
-_BRANCH = re.compile(r"work/mvp-mission-transport-[A-Za-z0-9._/-]{1,96}\\Z")
+_IDENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}\Z")
+_SHA40 = re.compile(r"[0-9a-f]{40}\Z")
+_SHA64 = re.compile(r"[0-9a-f]{64}\Z")
+_BRANCH = re.compile(r"work/mvp-mission-transport-[A-Za-z0-9._/-]{1,96}\Z")
 _STATUSES = frozenset({"queued", "in_progress", "completed"})
 _CONCLUSIONS = frozenset({None, "success", "failure", "cancelled", "timed_out", "skipped"})
 
