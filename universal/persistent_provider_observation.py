@@ -76,3 +76,21 @@ class ProviderObservation:
         return {name: getattr(self, name) for name in (
             "repository_id", "actor_id", "run_id", "attempt", "commit", "branch",
             "code_ref", "request_sha256", "status", "conclusion")}
+
+
+@dataclass(frozen=True, slots=True)
+class UnavailableReadback:
+    """Typed unavailable provider read; never permission, revocation or failure proof.
+
+    A host may report this only after a qualified read-only attempt. This
+    marker authorizes NO retry, new provider run or journal transition.
+    """
+    reason: str
+    observed_unix: int
+
+    def __post_init__(self):
+        if type(self.reason) is not str or self.reason not in {
+                "RATE_LIMIT", "ACCESS_DENIED", "NOT_FOUND", "UNAVAILABLE"}:
+            raise GuardError("invalid read failure classification")
+        if type(self.observed_unix) is not int or not 0 < self.observed_unix <= 2**63 - 1:
+            raise GuardError("invalid read failure observation time")
