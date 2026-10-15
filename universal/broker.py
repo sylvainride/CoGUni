@@ -160,12 +160,14 @@ def _trace(runtime, role, reason):
         runtime._event(role, "ipc.refused", "channel", "DENY", {"reason": reason})
 
 
-def verify_pending(runtime, environment, deadline):
+def verify_pending(runtime, environment, deadline, *, task_id=None):
     """Recover committed local candidates without re-emitting their mutations."""
     results = []
     rows = runtime.db.execute("SELECT tasks.id, runs.id AS run_id, runs.output_version FROM tasks JOIN runs ON runs.task=tasks.id WHERE tasks.validation_mode='DETERMINISTIC_EXACT_SHA' AND tasks.status='RESULT_READY' AND runs.state='SUCCEEDED' ORDER BY tasks.id,runs.started DESC").fetchall()
     seen = set()
     for row in rows:
+        if task_id is not None and row["id"] != task_id:
+            continue
         if row["id"] in seen:
             continue
         seen.add(row["id"])
@@ -192,9 +194,11 @@ def verify_pending(runtime, environment, deadline):
     return results
 
 
-def run_pool(db_path, workers=2, max_jobs=100, timeout=30, worker_names=None):
+def run_pool(db_path, workers=2, max_jobs=100, timeout=30, worker_names=None, *, task_id=None):
     if type(workers) is not int or not 1 <= workers <= 8 or type(max_jobs) is not int or not 1 <= max_jobs <= 10000 or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or not 0 < timeout <= 300:
         raise GuardError("invalid worker budget")
+    if task_id is not None:
+        Runtime._id(task_id)
     package, database = Path(__file__).parent.resolve(), Path(db_path).resolve()
     if database.is_relative_to(package) or database.is_relative_to(Path(sys.base_prefix).resolve()) or any(database.is_relative_to(Path(p).resolve()) for p in ("/lib", "/lib64", "/usr/lib")):
         raise GuardError("DB location intersects sandbox read mounts")
@@ -212,7 +216,7 @@ def run_pool(db_path, workers=2, max_jobs=100, timeout=30, worker_names=None):
             send_message(channel.socket, {"version": VERSION, "type": "stop"}, deadline=deadline)
             stop_channel(channel)
             return
-        claim = runtime.claim(channel.worker, ttl=min(3600, max(1, math.ceil(deadline - time.monotonic()))), environment=environment, supported_actions=Runtime.ACTIONS)
+        claim = runtime.claim(channel.worker, ttl=min(3600, max(1, math.ceil(deadline - time.monotonic()))), environment=environment, supported_actions=Runtime.ACTIONS, task_id=task_id)
         if claim is None:
             send_message(channel.socket, {"version": VERSION, "type": "stop"}, deadline=deadline)
             stop_channel(channel)
@@ -231,7 +235,7 @@ def run_pool(db_path, workers=2, max_jobs=100, timeout=30, worker_names=None):
         channels.append(verifier)
 
     try:
-        recovered = verify_pending(runtime, environment, deadline)
+        recovered = verify_pending(runtime, environment, deadline, task_id=task_id)
         if recovered:
             reports.append({"worker": "controller-recovery", "role": "controller", "results": recovered})
         for name, report in zip(names, reports):

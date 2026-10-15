@@ -173,6 +173,9 @@ jobs:
       run: python3 -B tools/run_ci_checks.py --mode full --out evidence/full
     - name: Run bounded generative fixtures
       run: python3 -B tools/run_generative_cases_v8.py --out evidence/generative
+    - name: Process an owner public synthetic mission on the qualified host
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/work/mvp-mission-transport-')
+      run: python3 -B tools/run_public_mission.py --out evidence/public-mission.json
     - name: Emit whitelisted JSON evidence to the job log
       if: always()
       run: |-
