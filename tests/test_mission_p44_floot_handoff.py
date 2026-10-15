@@ -2,14 +2,24 @@
 from dataclasses import replace
 import unittest
 
-from tests.test_mission_p43_registry import InertAdapterRegistryTests
-from universal.mission_adapter_registry import InertAdapterRegistry
+from tests.test_mission_contracts import mission
+from universal.mission_contracts import canonical
+from universal.mission_projects import profile_from_mission, ReadCapability
+from universal.mission_adapter_registry import InertAdapterRegistry, AdapterSlot
 from universal.mission_floot_handoff import preview_manual_floot_plan
 
 
 class FlootManualHandoffTests(unittest.TestCase):
     def setUp(self):
-        self.slot = InertAdapterRegistryTests().slot('synthetic-floot', kind='floot')
+        m = mission('synthetic-floot')
+        m['project']['kind'] = 'floot'
+        m['project']['owner'] = 'owner-A'
+        p = profile_from_mission(canonical(m), now_unix=150)
+        cap = ReadCapability(project_id=p.project_id, kind=p.kind, owner=p.owner,
+              base_version=p.base_version, source_sha256=p.source_sha256,
+              contract_sha256=p.contract_sha256, observed_unix=100, expires_unix=200,
+              offline_possible=True, read_permission=True, budget_calls=0)
+        self.slot = AdapterSlot(p, cap)
         self.registry = InertAdapterRegistry((self.slot,))
 
     def test_manual_plan_has_no_connected_or_applied_effect(self):
