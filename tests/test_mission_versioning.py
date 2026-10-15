@@ -75,6 +75,15 @@ class MissionVersioningTests(unittest.TestCase):
         with self.assertRaises(MissionContractError):
             self.out(export_bad)
 
+    def test_import_unpaired_unicode_refused_as_contract_error(self):
+        # An invalid UTF-8 scalar in *raw* JSON must not escape the untrusted
+        # decoder as an uncaught UnicodeEncodeError or mutate any owner state.
+        for raw in ('\ud800', '\udfff', '{"bad":"\ud800"}',
+                    'x' * (MAX_BUNDLE_BYTES + 1) + '\ud800'):
+            with self.subTest(raw=ascii(raw[:32])):
+                with self.assertRaises(MissionContractError):
+                    import_offline_bundle(raw, now_unix=150)
+
     def test_expiry_fails_on_import_even_with_intact_digest(self):
         wire = self.out()
         with self.assertRaises(MissionContractError):

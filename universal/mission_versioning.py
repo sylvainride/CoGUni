@@ -89,7 +89,14 @@ def import_offline_bundle(raw, *, now_unix, existing_mission_ids=()):
     """Validate immutable bundle only; never overwrite existing owner records."""
     if type(raw) not in (str, bytes):
         raise MissionContractError('invalid bundle byte input')
-    data = raw.encode('utf-8') if type(raw) is str else raw
+    # Bound untrusted text before encoding, then reject malformed Unicode as
+    # a contract error rather than exposing a raw codec exception.
+    if not 0 < len(raw) <= MAX_BUNDLE_BYTES:
+        raise MissionContractError('bundle exceeds hard byte limit')
+    try:
+        data = raw.encode('utf-8') if type(raw) is str else raw
+    except UnicodeError as exc:
+        raise MissionContractError('invalid bundle Unicode') from exc
     if not 0 < len(data) <= MAX_BUNDLE_BYTES:
         raise MissionContractError('bundle exceeds hard byte limit')
     value = _read(data)
