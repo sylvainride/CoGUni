@@ -13,6 +13,10 @@ independently authenticated owner integration.
   provider or human has been authenticated. Only a trusted owner host may inject
   `provider_reader`; never pass worker, user-uploaded or public-PR JSON as the
   reader.
+- `persistent_provider_observation.UnavailableReadback` represents a bounded
+  provider read failure (rate limit, access denial, 404 or outage). It produces
+  a conservative `HANDOFF` on the original reservation, not a new provider
+  execution, cancellation, lease extension, or extra owner poll.
 - `persistent_supervisor.PassiveSupervisor` consumes a finite explicit set of
   task IDs. It reuses `OwnerScheduler.status/ready/observe`,
   `mission_liveness.classify`, and `mission_polling.plan_read`. Each qualified
