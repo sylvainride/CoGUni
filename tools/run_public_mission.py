@@ -78,6 +78,24 @@ def verify_code_pin(request, context):
             raise GuardError('synthetic target is not ordinary text')
 
 
+def _packet_mode(packet):
+    """Version 2 opts in to parallel independent fixture branches only.
+
+    A mode is inert routing data, never a permission, a worker option or an
+    authorization to apply an output. Version 1 keeps its original A -> B gate.
+    """
+    version = packet.get('schema_version')
+    if type(version) is not int:
+        raise GuardError('invalid public request packet')
+    if version == 1 and set(packet) == {'schema_version', 'request', 'predecessor'}:
+        return None
+    if (version == 2 and set(packet) == {'schema_version', 'request', 'predecessor', 'mode'}
+            and type(packet['mode']) is str
+            and packet['mode'] in {'INDEPENDENT', 'DEPENDENT'}):
+        return packet['mode']
+    raise GuardError('invalid public request packet')
+
+
 def verify_predecessor(predecessor, context, code_ref=None):
     if predecessor is None:
         return None
@@ -115,6 +133,9 @@ def verify_predecessor(predecessor, context, code_ref=None):
     if len(sandbox) != 1 or not any(step['name'] == 'Process an owner public synthetic mission on the qualified host' and step['status'] == 'completed' and step['conclusion'] == 'success' for step in sandbox[0]['steps']):
         raise GuardError('predecessor mission step not proven')
     old = _read(git('show', commit + ':' + REQUEST))
+    old_mode = _packet_mode(old)
+    if old_mode is not None and (old_mode != 'INDEPENDENT' or old['predecessor'] is not None):
+        raise GuardError('predecessor is not an independent first mission')
     first = old['request']
     if first['code_ref'] != code_ref:
         raise GuardError('predecessor executed different reviewed code')
@@ -144,13 +165,18 @@ def run(request_path, out):
         if path.is_symlink() or path.stat().st_size > 16384:
             raise GuardError('invalid request file')
         packet = _read(path.read_bytes())
-        if set(packet) != {'schema_version', 'request', 'predecessor'} or type(packet['schema_version']) is not int or packet['schema_version'] != 1:
-            raise GuardError('invalid public request packet')
+        mode = _packet_mode(packet)
         req = packet['request']
         verify_code_pin(req, context)
         project = req['envelope']['project']['id']
-        if (project == 'synthetic-A' and packet['predecessor'] is not None) or (project == 'synthetic-B' and packet['predecessor'] is None):
+        if mode is None and ((project == 'synthetic-A' and packet['predecessor'] is not None)
+                             or (project == 'synthetic-B' and packet['predecessor'] is None)):
             raise GuardError('invalid two-mission dependency')
+        if mode == 'INDEPENDENT' and (project not in {'synthetic-A', 'synthetic-B'}
+                                      or packet['predecessor'] is not None):
+            raise GuardError('independent mission requires isolated synthetic project and no predecessor')
+        if mode == 'DEPENDENT' and (project != 'synthetic-B' or packet['predecessor'] is None):
+            raise GuardError('dependent mission requires project B and verified project A')
         predecessor = verify_predecessor(packet['predecessor'], context, req['code_ref'])
         with tempfile.TemporaryDirectory(prefix='coguni-public-mission-') as tmp:
             root = Path(tmp)
@@ -173,6 +199,8 @@ def run(request_path, out):
                           'persistent_service': False,
                           'persistence': 'REQUEST_GIT_AND_PROVIDER_LOG_RETENTION_ONLY',
                           'observed_unix': int(time.time())}
+                if mode is not None:
+                    result.update(schema_version=2, mode=mode)
     out = Path(out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, sort_keys=True) + '\n')
     print(json.dumps({'public_mission_receipt': result}, sort_keys=True))
