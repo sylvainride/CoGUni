@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "request": {
+    "envelope": {
+      "schema_version": 1,
+      "mission_id": "chat-native-a-20261015-1633",
+      "idempotency_key": "key-synthetic-A-chat-native-a-20261015-1633",
+      "project": {
+        "kind": "local",
+        "id": "synthetic-A",
+        "owner": "265171248",
+        "base_version": "48ca6d7477a51167b6c6d42206d424a27875905e345435b562f16357e0130457",
+        "source_of_truth": "owner-synthetic-fixture"
+      },
+      "contract": {
+        "task_id": "task-chat-native-a-20261015-1633",
+        "objective": "bounded synthetic string computation",
+        "allowed_actions": [
+          "simulate"
+        ],
+        "forbidden_actions": [
+          "publish"
+        ],
+        "criteria": [
+          "exact owner output and independent target readback"
+        ],
+        "dependencies": [],
+        "max_attempts": 2,
+        "max_duration_seconds": 60,
+        "max_external_cost": 0,
+        "artifact_policy": "public_synthetic"
+      },
+      "created_unix": 1792074789,
+      "expires_unix": 1792096389,
+      "source_sha256": "678accb2408ba6beec667bda9b4afc8a9728113a95c5d709a85dc81b382a98e3",
+      "privacy": "PUBLIC_SYNTHETIC"
+    },
+    "payload": "synthetic:chat-native-a",
+    "action": "uppercase",
+    "code_ref": "1fafa8248900934ebcb54bbc737557a43ecb5a5f"
+  },
+  "predecessor": null
+}
