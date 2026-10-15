@@ -49,6 +49,8 @@ OWNER_TESTS = (
     "tests.test_mission_p34_dag", "tests.test_mission_p35_silence",
     "tests.test_mission_p36_two_turns", "tests.test_mission_p43_registry",
     "tests.test_mission_p44_floot_handoff", "tests.test_mission_p47_offline_acceptance",
+    # P5 trusted owner host/read-only reader; no untrusted worker or network.
+    "tests.test_host_github", "tests.test_host_process", "tests.test_host_main",
 ) + tuple("tests.test_generative_v8.GenerativeTests." + name for name in (
     "test_strict_default_still_requires_sha_and_registered_action",
     "test_generative_requires_mode_policy_action_and_absent_expected_sha",
