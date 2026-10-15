@@ -27,6 +27,15 @@ OWNER_TESTS = (
     "tests.test_policy_runner_v8.PolicyInputTests",
     "tests.test_isolation_v6.TestIsolationV6.test_missing_bubblewrap_never_returns_unconfined_command",
     "tests.test_ci_binding", "tests.test_ci_checks", "tests.test_consent",
+    # Cheap, no-untrusted-worker checks for the offline Chat bridge. These
+    # belong in owner-contracts too: passing sandbox-runtime alone must not
+    # hide a protocol regression or a spoofed worker receipt.
+    "tests.test_mission_contracts", "tests.test_mission_transitions",
+    "tests.test_mission_admission", "tests.test_mission_liveness",
+    "tests.test_mission_polling", "tests.test_mission_versioning",
+    "tests.test_mission_handoff", "tests.test_mission_chat_fixture",
+    "tests.test_mission_redaction", "tests.test_mission_crash_recovery",
+    "tests.test_mission_projects",
 ) + tuple("tests.test_generative_v8.GenerativeTests." + name for name in (
     "test_strict_default_still_requires_sha_and_registered_action",
     "test_generative_requires_mode_policy_action_and_absent_expected_sha",
