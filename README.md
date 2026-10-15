@@ -63,3 +63,14 @@ for one exact local gate contract. It rejects worker approval flags and never
 grants external publication or spending rights. See
 [ADR 013](docs/ADR_013_OWNER_CONSENT.md) for the API, trust boundary and checks
 that remain to implement.
+
+## Opt-in public synthetic mission MVP
+
+The local owner CLI and a narrowly scoped GitHub Actions public-fixture adapter
+are implemented on the mission bridge development branch. They reuse the
+existing stores, contracts and mandatory confined workers. The adapter has no
+write token or secrets and never applies a target change. The invoking host
+inspects the result and applies to the synthetic target, then checks readback.
+See [the transport runbook](docs/mission_transport_mvp.md) for the CLI, permission
+boundaries, replay behavior and limits. This is not a connected native ChatGPT
+Project, a private hosted service, an external model or a persistent scheduler.
