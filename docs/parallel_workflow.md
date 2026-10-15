@@ -26,6 +26,19 @@ branch `work/mvp-mission-transport-20261015`, so a PR stacked on that base gets
 the same two checks on its virtual merge. `main` remains included. No wildcard
 base, privileged pull-request event or protected-branch setting is introduced.
 
+The preflight permits that stacked base only for PR #14 from
+`work/parallel-missions-20261015`, with base commit
+`1fafa8248900934ebcb54bbc737557a43ecb5a5f`. Both main and stacked PRs now require
+the owner actor/author, same immutable head/base repository identity, the injected
+PR event and a fresh public read of the PR. Their exact head/base/merge SHAs must
+agree with the checkout's two ordered merge parents. Forks, another stacked PR,
+base movement, a stale event or changed merge are refused. A later base change
+requires explicit policy review and fresh CI; a green observation is bound to
+its recorded commits, not to future branch tips. API unavailability fails closed.
+The preflight logs the checkout tree and PR tuple. It is still CI context
+qualification inside the reviewed workflow, not a repository lock or an
+authentication mechanism for locally fabricated environment variables.
+
 `python3 -B -m unittest tests.test_parallel_workflow -v` reads the committed YAML
 and evaluates its actual concurrency expressions across mission, ordinary CI,
 pending, rerun and wrong-event/ref contexts. The tests use only the standard

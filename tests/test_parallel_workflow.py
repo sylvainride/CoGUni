@@ -151,6 +151,8 @@ class ParallelWorkflowTests(unittest.TestCase):
         self.assertIsNotNone(block)
         branches = [line[6:] for line in block["branches"].splitlines()]
         self.assertEqual(branches, ["main", "work/mvp-mission-transport-20261015"])
+        from tools.ci_repository_binding import PR_BASES
+        self.assertEqual(tuple(branches), PR_BASES)
         jobs = re.findall(r"^  ([a-z][a-z-]+):\n    name: ([a-z][a-z-]+)$", text, re.MULTILINE)
         self.assertEqual(jobs, [("owner-contracts", "owner-contracts"), ("sandbox-runtime", "sandbox-runtime")])
         self.assertRegex(text, r"(?m)^permissions: \{\}$")
