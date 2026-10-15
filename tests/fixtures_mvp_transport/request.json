@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "request": {
+    "envelope": {
+      "schema_version": 1,
+      "mission_id": "github-a-20261015",
+      "idempotency_key": "key-synthetic-A-github-a-20261015",
+      "project": {
+        "kind": "local",
+        "id": "synthetic-A",
+        "owner": "265171248",
+        "base_version": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_of_truth": "owner-synthetic-fixture"
+      },
+      "contract": {
+        "task_id": "task-github-a-20261015",
+        "objective": "bounded synthetic string computation",
+        "allowed_actions": [
+          "simulate"
+        ],
+        "forbidden_actions": [
+          "publish"
+        ],
+        "criteria": [
+          "exact owner output and independent target readback"
+        ],
+        "dependencies": [],
+        "max_attempts": 2,
+        "max_duration_seconds": 60,
+        "max_external_cost": 0,
+        "artifact_policy": "public_synthetic"
+      },
+      "created_unix": 1792073071,
+      "expires_unix": 1792094671,
+      "source_sha256": "f0ff66222f9addcd395bca5d14c39a46d01897412ff5a87077b30f4f4c1400ca",
+      "privacy": "PUBLIC_SYNTHETIC"
+    },
+    "payload": "synthetic:github-alpha",
+    "action": "uppercase",
+    "code_ref": "fd52973d2c14989ec9755cade2bc61f8bd273a41"
+  },
+  "predecessor": null
+}
