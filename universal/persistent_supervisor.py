@@ -11,7 +11,7 @@ from .core import GuardError
 from .parallel_scheduler import OwnerScheduler
 from .mission_liveness import Observation as LivenessObservation, classify
 from .mission_polling import PollCursor, plan_read
-from .persistent_provider_observation import ProviderObservation
+from .persistent_provider_observation import ProviderObservation, UnavailableReadback
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +102,12 @@ class PassiveSupervisor:
         if plan.action != "READ_ONLY_POLL":
             return self._verdict(status, plan.action, "UNKNOWN", plan.reason)
         readback = provider_reader(task_id, status.copy())
+        if type(readback) is UnavailableReadback:
+            if readback.observed_unix > now_unix or now_unix - readback.observed_unix > 3600:
+                raise GuardError("stale or future unavailable-provider report")
+            return self._verdict(status, "HANDOFF", "UNKNOWN",
+                                 "provider read unavailable: " + readback.reason
+                                 + "; owner requalification required, no retry")
         if (type(readback) is not tuple or len(readback) != 2
                 or type(readback[0]) is not ProviderObservation
                 or (readback[1] is not None and type(readback[1]) is not HealthReadback)):
