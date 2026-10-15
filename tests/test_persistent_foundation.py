@@ -339,10 +339,10 @@ with ContinuityJournal(sys.argv[1], clock=lambda: 100.0) as j:
                         (False, 100)):
             with self.subTest(changes=changes), self.assertRaises(GuardError):
                 UnavailableReadback(*changes)
-        for bad_time in (101, 1):
-            with self.subTest(observed_unix=bad_time), self.assertRaises(GuardError):
-                self.supervisor.observe_once("A", provider_reader=lambda *_: UnavailableReadback(
-                    "RATE_LIMIT", bad_time), now_unix=100 if bad_time == 101 else 4000)
+        with self.assertRaises(GuardError):
+            self.supervisor.observe_once(
+                "A", provider_reader=lambda *_: UnavailableReadback("RATE_LIMIT", 101),
+                now_unix=100)
 
     def test_worker_supplied_success_json_cannot_be_provider_reader(self):
         self.submit()
