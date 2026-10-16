@@ -26,7 +26,7 @@ class TermuxP5GateContractTests(unittest.TestCase):
                 gate, 'proc_fallback', return_value=gate._row('PASS', 'checked')), patch.object(
                 gate, 'run_real_tests', side_effect=AssertionError('explicit opt-in missing')):
             report = gate.qualify()
-        self.assertEqual(report['decision'], 'PARTIAL_DEVICE_QUALIFICATION')
+        self.assertEqual(report['decision'], 'ANDROID_P5_BLOCKED_INVARIANT_NOT_EQUIVALENT')
         self.assertFalse(report['autonomous_ai_installed'])
 
     def test_source_drift_blocks_all_execution_even_when_requested(self):
@@ -52,7 +52,7 @@ class TermuxP5GateContractTests(unittest.TestCase):
                 gate, 'run_real_tests', return_value=gate._row('BLOCKED', 'missing proc')) as real, patch.object(
                 gate, 'provider_four_gets', side_effect=AssertionError('network called')):
             report = gate.qualify(deep_guardian=True, provider=True)
-        real.assert_called_once_with(gate.GUARDIAN_BASIC)
+        real.assert_not_called()
         self.assertEqual(report['checks']['p5_guardian_deep']['status'], 'BLOCKED')
 
     def test_only_all_opt_in_successes_allow_next_physical_gate(self):
@@ -62,9 +62,10 @@ class TermuxP5GateContractTests(unittest.TestCase):
                 gate, 'run_real_tests', return_value=gate._row('PASS', 'real')) as real, patch.object(
                 gate, 'provider_four_gets', return_value=gate._row('PASS', 'real')) as net:
             report = gate.qualify(deep_guardian=True, resume=True, provider=True)
-        self.assertEqual(real.call_count, 3)
-        net.assert_called_once()
-        self.assertEqual(report['decision'], 'READY_FOR_BACKGROUND_QUALIFICATION')
+        real.assert_not_called()
+        net.assert_not_called()
+        self.assertEqual(report['decision'], 'ANDROID_P5_BLOCKED_INVARIANT_NOT_EQUIVALENT')
+        self.assertEqual(report['checks']['p5_memory_enforcement']['status'], 'BLOCKED')
         self.assertEqual(report['checks']['background_doze_boot']['status'], 'NOT_TESTED')
         self.assertFalse(report['service_installed'])
 
@@ -74,7 +75,7 @@ class TermuxP5GateContractTests(unittest.TestCase):
                 gate, 'proc_fallback', return_value=gate._row('PASS', 'checked')), patch.object(
                 gate, 'run_real_tests', return_value=gate._row('PASS', 'real')):
             report = gate.qualify(guardian=True, resume=True)
-        self.assertEqual(report['decision'], 'PARTIAL_DEVICE_QUALIFICATION')
+        self.assertEqual(report['decision'], 'ANDROID_P5_BLOCKED_INVARIANT_NOT_EQUIVALENT')
 
     def test_source_pin_list_is_exact_and_public(self):
         self.assertEqual(len(gate.PINS), 6)

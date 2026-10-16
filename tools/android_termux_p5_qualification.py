@@ -1,8 +1,9 @@
-"""Opt-in *physical* Termux qualification of the existing P5 host components.
+"""Passive Termux checks; active P5 qualification is blocked on memory safety.
 
 Never adapts the P5 security boundary. No app, timer, daemon, privileges, keys,
 SQLite migration, mission submission or GitHub writes. Results are a sanitized
-report only; CI or a desktop cannot certify an Android device.
+report only; CI or a desktop cannot certify an Android device. Legacy active
+helpers remain available for reviewed tests, but qualify() never invokes them.
 """
 import argparse
 import hashlib
@@ -17,7 +18,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_P6 = '4db2457c34e9dd83e96e4ec11ca8b3a5be9654c9'
 PINS = {
-    'universal/host_process.py': '5b144f8ad9d3763973dcef1b97d21b8575c984a9',
+    'universal/host_process.py': 'c1c0bdd3b91017a53dbf6bfe000d3effb1f99f6d',
     'universal/host_main.py': '41bdcc2bb1b93c15d6f6f866c69b4048f22572bc',
     'universal/host_github.py': 'c44eaae5e3671cf36327d6857b4733a2efcaf665',
     'universal/continuity.py': 'a7e75dd1c818affa1954fd494347b2a93798feec',
@@ -146,6 +147,7 @@ def qualify(guardian=False, deep_guardian=False, resume=False, provider=False):
         'android_termux_scope': _row('BLOCKED', 'must execute on actual Termux device'),
         'p5_source_pins': _row('NOT_TESTED', 'requires inspected P5 source checkout'),
         'p5_proc_fallback': _row('NOT_TESTED', 'P5 original /proc walker not invoked'),
+        'p5_memory_enforcement': _row('BLOCKED', 'Android equivalent memory enforcement not demonstrated'),
         'p5_guardian_basic': _row('NOT_TESTED', 'explicit --guardian required'),
         'p5_guardian_deep': _row('NOT_TESTED', 'explicit --deep-guardian required'),
         'p5_owner_resume': _row('NOT_TESTED', 'explicit --resume required'),
@@ -168,43 +170,32 @@ def qualify(guardian=False, deep_guardian=False, resume=False, provider=False):
         return {'schema': 1, 'scope': 'ANDROID_DEVICE_ONLY', 'checks': checks,
                 'decision': 'BLOCKED_PROC', 'service_installed': False,
                 'autonomous_ai_installed': False}
-    if deep_guardian:
-        guardian = True
-    if guardian:
-        checks['p5_guardian_basic'] = run_real_tests(GUARDIAN_BASIC)
-    if deep_guardian and checks['p5_guardian_basic']['status'] == 'PASS':
-        checks['p5_guardian_deep'] = run_real_tests(GUARDIAN_DEEP)
-    elif deep_guardian:
-        checks['p5_guardian_deep'] = _row('BLOCKED', 'guardian prerequisite refused')
-    if resume:
-        checks['p5_owner_resume'] = run_real_tests(OWNER_RESTART)
-    if provider:
-        if (checks['p5_guardian_basic']['status'] == 'PASS'
-                and checks['p5_guardian_deep']['status'] == 'PASS'):
-            checks['p5_guarded_github_gets'] = provider_four_gets()
-        else:
-            checks['p5_guarded_github_gets'] = _row('BLOCKED', 'deep guardian not qualified in same invocation')
-    selected = ('p5_guardian_basic', 'p5_owner_resume', 'p5_guarded_github_gets')
-    decision = ('READY_FOR_BACKGROUND_QUALIFICATION'
-                if all(checks[k]['status'] == 'PASS' for k in selected)
-                and checks['p5_guardian_deep']['status'] == 'PASS'
-                else 'PARTIAL_DEVICE_QUALIFICATION')
+    # No diagnostic or caller-supplied success can qualify a memory boundary.
+    # Keep old flags recognizable, but suspend ALL active tests, including
+    # synthetic journal/restart and network tests, until a reviewed change
+    # demonstrates equivalent enforcement and the physical prerequisites.
+    for selected, requested in (
+            ('p5_guardian_basic', guardian or deep_guardian),
+            ('p5_guardian_deep', deep_guardian),
+            ('p5_owner_resume', resume), ('p5_guarded_github_gets', provider)):
+        if requested:
+            checks[selected] = _row('BLOCKED', 'Android memory prerequisite not qualified')
     return {'schema': 1, 'scope': 'ANDROID_DEVICE_ONLY', 'checks': checks,
-            'decision': decision, 'service_installed': False,
+            'decision': 'ANDROID_P5_BLOCKED_INVARIANT_NOT_EQUIVALENT', 'service_installed': False,
             'autonomous_ai_installed': False}
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--guardian', action='store_true', help='run real P5 bounded-process tests')
-    p.add_argument('--deep-guardian', action='store_true', help='opt in to P5 fork, SIGTERM/SIGKILL physical tests')
-    p.add_argument('--resume', action='store_true', help='run real P5 local synthetic SQLite/restart tests')
-    p.add_argument('--provider', action='store_true', help='opt in to FOUR public GitHub GETs via actual P5 guardian')
+    p.add_argument('--guardian', action='store_true', help='suspended: Android memory prerequisite blocked')
+    p.add_argument('--deep-guardian', action='store_true', help='suspended: no physical fork/kill tests')
+    p.add_argument('--resume', action='store_true', help='suspended: no SQLite/restart tests')
+    p.add_argument('--provider', action='store_true', help='suspended: no network tests')
     a = p.parse_args(argv)
     # The report always whitelists text, never PIDs, private paths or raw traces.
     report = qualify(a.guardian, a.deep_guardian, a.resume, a.provider)
     print(json.dumps(report, sort_keys=True, indent=2))
-    return 0 if report['decision'] == 'READY_FOR_BACKGROUND_QUALIFICATION' else 2
+    return 2  # Android P5 remains blocked, independently of diagnostic success.
 
 
 if __name__ == '__main__':

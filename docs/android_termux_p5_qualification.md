@@ -1,139 +1,134 @@
-# Android et Termux : recette physique P5, sans installation
+# Android / Termux : P5 bloqué, diagnostic manuel seulement
 
-Etat initial sur le téléphone : ANDROID_TERMUX_HOST_FEASIBILITY=PARTIAL.
-Le diagnostic rapporté par le propriétaire montre Python >= 3.11,
-SQLite WAL / flock, création de processus et PR_SET_CHILD_SUBREAPER en PASS ;
-l'index /proc des enfants est inaccessible (PARTIAL). Aucune intégration
-guardian P5, reprise SQLite P5, HTTPS P5, veille Doze ou démarrage au boot
-n'a été exécutée sur l'appareil au cours de cette livraison.
+`ANDROID_P5_BLOCKED_INVARIANT_NOT_EQUIVALENT` : aucune borne mémoire
+équivalente n'est démontrée pour Android. `run_bounded` et l'entrée directe
+du guardian refusent Android, y compris Python Android déclarant `linux`
+mais exposant `sys.getandroidapilevel`. Le chemin Linux conserve les limites
+CORE=0, AS=512 Mio, CPU et NOFILE=64, ses délais et son nettoyage original.
+Ce guardian protège un lecteur hôte de confiance ; il ne remplace jamais
+la sandbox bwrap/seccomp des workers.
 
-## Réutilisation des sources immuables
+Un abort sous AS ne prouve ni l'origine interne du signal ni l'impossibilité
+de toute solution Android future. AS borne l'espace **virtuel**, pas la RAM
+résidente. Les réservations de l'allocateur, le loader bionic, Python et
+les appels mmap/brk sont des hypothèses à départager. RLIMIT_DATA,
+RLIMIT_RSS, polling RSS ou un timeout ne sont pas des substituts équivalents.
+Voir [getrlimit(2)](https://man7.org/linux/man-pages/man2/getrlimit.2.html).
 
-Repo sylvainride/CoGUni (ID 1418009675, owner 265171248).
-PR #16 P5 au commit 5a000d8a4c719665534480d065cf5150b772f0a3 :
-le guardian et le lecteur GitHub de P5, host_main, ContinuityJournal,
-OwnerScheduler et les tests originaux sont préservés sans édition.
-PR #17 P6 au commit 4db2457c34e9dd83e96e4ec11ca8b3a5be9654c9 :
-les modèles systemd inertes NE fonctionnent pas tels quels dans Termux.
+## Sources et frontières
 
-Nouveau : tools/android_termux_p5_qualification.py, outil de qualification
-MANUEL, non service et non ordonnanceur. Il compare six Git blob SHA P5
-critiques avant d'exécuter les véritables tests du code existant P5.
-Cette vérification n'atteste pas toute l'arborescence ou la pérennité.
-Les contre-tests tests/test_android_termux_p5_qualification.py en CI Linux
-sont exclusivement contractuels, jamais une certification du téléphone.
+Dépôt officiel `sylvainride/CoGUni`, ID `1418009675`, owner `265171248`.
+Vérifier le commit et le tree immuables de la candidate et sa CI depuis
+GitHub avant de télécharger ou d'exécuter une nouvelle source. Garder
+le checkout dans le HOME privé de Termux, distinct des rapports et journaux.
+Le harnais compare six Git blobs critiques : c'est un contrôle partiel de
+dérive, pas une signature ni une attestation de l'arbre entier.
 
-## Commandes sur le téléphone, uniquement sur choix explicite
+Le changement du guardian change `implementation_sha256()`. Les anciennes
+configurations et reçus P5 doivent refuser cette source. **Ne pas réécrire
+les pins**, WAL, journal original ou checkpoints pour faire passer un refus.
+Conserver l'ancienne source requalifiable. Les exemples P6 restent inertes
+et épinglés à leur ancienne source ; leur requalification exige un accord
+distinct, avec ancre de fraîcheur indépendante pour toute restauration.
 
-Code Git checkout dans HOME privé de Termux, jamais Downloads ni stockage
-partagé. Contrôler le remote officiel, le commit et le tree du checkout,
-puis lancer depuis la racine du dépôt :
+## Première commande : observations passives
 
-    cd "$HOME/CoGUni"
-    git remote -v
-    git rev-parse HEAD 'HEAD^{tree}'
-    python -B -m tools.android_termux_p5_qualification
+Depuis un checkout revu et propre :
 
-Par défaut aucun processus P5 n'est lancé et aucun GET réseau effectué.
-Les étapes indépendantes ci-dessous sont des choix humains successifs :
+```sh
+git remote get-url origin
+git status --porcelain --untracked-files=all
+git rev-parse HEAD 'HEAD^{tree}'
+python -B -m tools.android_termux_p5_qualification
+python -B -m tools.p5_memory_diagnostic
+```
 
-    # Vrai guardian P5, succès court et timeout physique
-    python -B -m tools.android_termux_p5_qualification --guardian
+Un code retour **2 est attendu** : aucune qualification P5. Aucun enfant
+n'est lancé par défaut, aucun réseau ni journal n'est utilisé. L'ancien
+harnais conserve les options `--guardian`, `--deep-guardian`, `--resume`
+et `--provider` pour rendre leur refus explicite : toutes leurs épreuves
+actives sont suspendues par la gate mémoire. Un marqueur Termux ou des
+résultats simulés ne peuvent plus produire READY.
 
-    # Risque : forks/double-forks, SIGTERM et SIGKILL de processus réels
-    python -B -m tools.android_termux_p5_qualification --deep-guardian
+## Prochaine sonde unique, uniquement sur choix du propriétaire
 
-    # Vraies fixtures originales P5, deux OS PID, crash/ACK SQLite, UNKNOWN
-    python -B -m tools.android_termux_p5_qualification --resume
+Après contrôle passif des sources, le propriétaire peut choisir :
 
-    # Quatre GET publics GitHub au travers du guardian original P5
-    # Après accord pour le réseau et seulement après succès guardian
-    python -B -m tools.android_termux_p5_qualification --deep-guardian --resume --provider
+```sh
+umask 077
+python -B -m tools.p5_memory_diagnostic --probe-exec > "$HOME/coguni-p5-memory.json"
+```
 
-Attention : les tests physiques profonds lancent et tuent des descendants.
-Si le guardian ne les nettoie pas, des processus peuvent survivre.
-Le harnais stoppe les tests au premier échec et ne permet pas de contourner
-le kernel, SELinux ni les refus. Examiner les processus avant toute reprise.
-Aucun root, proot de substitution, désactivation d'Android, permission étendue,
-WAL/SHM réel, secret, migration ou journal owner existant n'est nécessaire.
+Le code retour reste **2**, même si tous les contrôles de recherche passent.
+Le rapport ne contient ni chemins, PID, environnement, stderr, stack dump
+ni liste de processus. Ne pas publier un rapport physique sans revue.
+Le fichier est créé par le shell ; choisir un nouveau nom privé pour
+conserver une preuve précédente. Ne pas placer le code sur stockage partagé.
 
-Le lecteur réseau original host_github est exécuté via le véritable
-host_process.run_bounded, durée maximale 24 secondes, sur un run public
-synthétique immuable 38791437019, attempt 1, commit
-0a070e653efd091a13164a86b4359d930c80d4ed. Aucune URL configurable,
-aucun jeton, aucune écriture GitHub. Un OBSERVED ne vaut ni RESULT_APPLIED ni
-preuve d'authentification du canal Chat.
+Séquence finie : baseline sans AS, AS après démarrage Python, AS avant
+exec du lecteur, puis test négatif. Chaque cas remplace un enfant direct
+par `execve`, sans fork détaché ni guardian. Le parent attend cet enfant ;
+timeout 3 s par cas, CORE=0, CPU=2/3 s, NOFILE=64. Les VMS/RSS de **soi-même**
+sont mesurées avant/après exec. Une réservation mmap PROT_NONE au-dessus
+du seuil doit réussir avant AS, puis échouer par ENOMEM sous AS ; aucune
+page n'est touchée pour remplir la RAM. Cela teste un refus d'espace virtuel,
+pas un OOM résident ni l'équivalence d'un autre limiteur.
 
-Le JSON résultat n'inclut ni chemins privés, ni PIDs, ni stdout brut.
-BLOCKED_SOURCE interdit les essais P5 ; BLOCKED_PROC constate que le
-vrai repli P5 sous /proc refuse ; BLOCKED_NON_TERMUX interdit toute
-qualification hors Termux. Un code retour 2 signifie non qualifié.
-READY_FOR_BACKGROUND_QUALIFICATION ne vaut jamais ANDROID_HOST_VERIFIED :
-il reste à qualifier Doze, redémarrage, batterie et ordonnancement réel.
+Arrêt immédiat au premier abort, timeout, erreur ou trace UNKNOWN. Aucun
+retry, daemon ou balayage automatique de seuil. `--as-mib 1024` permet un
+second seuil borné de recherche, **uniquement si un nouvel élément le
+justifie et sur nouveau choix humain** ; le seuil P5 reste 512 Mio.
+Ne pas répéter simplement des aborts déjà observés.
 
-Les options du kit privé initial permettent, séparément, --network,
---soak-minutes 30 et --report-soak, uniquement sur l'appareil. Mesurer les
-interruptions, écran verrouillé, données mobiles, WiFi, reboot, gaps
-d'observation, arrêt forcé et Termux:Boot, sans supposer 24/7 à partir d'un
-essai de 30 minutes. Ne jamais publier journaux, sauvegardes, WAL/SHM,
-process listings privés ou relevés sensibles.
+Lecture du résultat :
 
-## Gates (toutes distinctes)
+| Observation | Conclusion bornée |
+| --- | --- |
+| Baseline échoue | Sonde ou runtime non qualifié ; arrêter |
+| AS après exec échoue | AS affecte aussi le runtime déjà chargé ; cause interne inconnue |
+| Après exec passe, avant exec abort | Chemin exec/initialisation à investiguer ; pas preuve du composant fautif |
+| Pas de marqueur READER_PYTHON | Aucun code Python lecteur observé ; pas de PID ou cleanup inventé |
+| mmap non borné échoue aussi | Test négatif non discriminant ; aucune preuve d'enforcement |
+| Tous les cas passent | Recherche locale seulement ; P5 Android reste bloqué |
 
-A : diagnostic primitives Python, enfant, subreaper, SQLite/flock :
-    PASS rapporté, mais /proc PARTIAL.
-B : guardian P5 original avec reaping réel, double-fork, SIGKILL :
-    NOT_TESTED.
-C : deux PID, même SQLite P5 synthétique, fence, lease, ACK perdu :
-    NOT_TESTED sur Android.
-D : quatre GET HTTPS publics P5 via guardian et pins de provenance :
-    NOT_TESTED.
-E : veille, Doze, réseau indisponible, reboot, interruptions :
-    NOT_TESTED.
-F : vraie cadence ordonnancée sous quotas Android et politique de coût :
-    NOT_TESTED.
-G : pont natif Android authentifié avec permissions minimales :
-    NOT_TESTED.
+Le rapport distingue `FAILED_BEFORE_READER`, `READER_ABORT`,
+`READER_FAILED`, `TIMEOUT`, `UNKNOWN`, `SOURCE_PIN_BLOCKED` et les étapes
+connues. Un retour signal appartient au processus remplacé par exec ;
+il n'attribue pas l'abort au linker ou à Python. La sonde ne lance pas
+le guardian : aucun de ses résultats ne prouve son reaping.
 
-Le repli P5 par /proc/[pid]/stat et le reaping réel ne doivent JAMAIS être
-simulés pour obtenir un PASS. Le guardian du host n'est pas une sandbox
-de workers : bwrap/seccomp restent obligatoires selon les cas originaux.
+## Contrôle réutilisable de dérive et fraîcheur
 
-## Micro-application compagnon, architecture prévue, PAS APK
+La capacité `RLIMIT_AS_EXEC_AND_DENIAL` porte son evidence, fingerprint,
+`last_verified_at` et TTL maximal 3600 s. L'empreinte lie source P5,
+outil, Python, architecture, API Android déclarée, kernel et seuil.
+`evidence_decision` refuse absence, UNKNOWN, horodatage futur, expiration,
+types invalides ou dérive. `CURRENT_RESEARCH_ONLY` reste une observation
+non signée, jamais une autorisation. Il ne couvre pas tous les packages
+Termux/libc ni une identité matérielle : exporter ces inconnues à la revue.
 
-Moteur unique : conserver Python P5, OwnerScheduler, ContinuityJournal,
-fences, quotas, preuves et source pin sur le seul hôte approuvé. Kotlin
-n'est pas une seconde autorité et ne doit jamais déclencher un effet métier.
+Le circuit d'arrêt est local à une invocation. Il n'existe pas de compteur
+persistant ni d'ordonnanceur automatique. Conserver les rapports privés et
+ne relancer qu'après un changement probant ; orchestration future plafonnée
+à deux tentatives, puis NEEDS_OWNER. Aucun effet UNKNOWN n'est rejoué.
 
-Modules UI futurs : status, alerts, diagnostics, manual-stop,
-redacted-export ; présenter UNKNOWN_EFFECT, HANDOFF, SUSPECT, provenance,
-version et prochain tick indicatif sans inventer un RESULT_APPLIED.
+## Gates restantes et choix d'hôte
 
-Première version : affichage d'un rapport volontairement exporté et expurgé,
-pas de prise directe sur le filesystem privé Termux, SQLite, HTTP localhost,
-exported intent RUN_COMMAND ou écoute background supposée. Un export
-n'est pas une attestation de l'owner à lui seul.
+Avant toute future voie P5 Android : enforcement équivalent démontré,
+guardian physique/reaping complet malgré permissions /proc, source fraîche,
+reprise du même journal synthétique, leases/fences/ACK, quatre GET publics
+sur accord, puis énergie/Doze/boot et quotas séparément. SIGKILL du parent,
+double-fork, réseau et endurance restent suspendus. Aucune CI Linux ou
+simulation Android ne remplace ces preuves.
 
-IPC futur (conditionnel) : contrat versionné et borné, UID/signature et
-audience Android vérifiés, nonce/anti-replay, TTL, consentement, rejet des
-commandes arbitraires, aucune donnée privée en transit non autorisé.
-Test sur le véritable Android 16 avant tout bouton d'arrêt opérationnel.
+**Fallback retenu : hôte Linux durable qualifié, Android comme interface.**
+La sélection et le déploiement de cet hôte demandent une décision séparée.
+Actions CI est éphémère, pas un serveur permanent. Aucune installation,
+fusion, migration ou activation n'est effectuée par ces outils.
 
-Permissions minimales : pas de root, accessibilité, stockage global,
-alarmes exactes, GitHub write, secret obligatoire ou permission de
-foreground détournée. Notifications uniquement avec consentement.
-WorkManager périodique : minimum 15 min, sans timing garanti sous Doze.
-Android 16 applique aussi des quotas jobs même lors de certains FGS.
-
-## Choix conditionnels
-
-- Termux seul : candidat de démonstration manuelle après gates B/C/D ;
-  aucun hôte durable certifié.
-- Termux + APK : architecture UX possible après B–G, pont authentifié
-  et droits revus ; aucune APK créée ou installée dans cette PR.
-- Linux durable alternatif : préféré si /proc, nettoyage ou endurance
-  échouent. Android reste console ; l'hôte Linux exige approbation et
-  qualification P5/P6 propres.
-
-Linux CI, simulations et fixtures ne démontrent pas la viabilité physique
-Android. Main, PR P5/P6, receiver Chat OFF et routeur OFF demeurent inchangés.
+Le compagnon Android futur affiche des rapports expurgés et les décisions
+humaines. IPC authentifié, UID/signature, audience, nonce/TTL et anti-replay
+précèdent toute commande. Pas d'intent RUN_COMMAND exposé, de tunnel,
+token ou accès SQLite implicite. Chat, Work et Codex ne sont pas requis
+pour exécuter le moteur déterministe ; leur intégration est un chantier
+distinct. `AUTONOMOUS_AI_INSTALLED=false`.

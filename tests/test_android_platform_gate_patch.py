@@ -1,4 +1,4 @@
-"""Targeted Android gate contracts without falsifying sys.platform.
+"""Targeted Android refusal contracts without claiming physical validation.
 
 AST proves only platform eligibility. Real Linux CI tests use the original
 P5 guardian; they are NOT certification of any Android device.
@@ -14,7 +14,7 @@ from tools.android_termux_p5_qualification import PINS, source_pins
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'universal' / 'host_process.py'
-EXPECTED_BLOB = '5b144f8ad9d3763973dcef1b97d21b8575c984a9'
+EXPECTED_BLOB = 'c1c0bdd3b91017a53dbf6bfe000d3effb1f99f6d'
 
 
 def platform_checks(tree):
@@ -53,10 +53,10 @@ class AndroidPlatformGatePatchTests(unittest.TestCase):
             self.assertIsInstance(comp.ops[0], ast.NotIn)
             self.assertEqual(len(comp.comparators), 1)
             names = ast.literal_eval(comp.comparators[0])
-            self.assertEqual(names, ('linux', 'android'))
-            for name in ('linux', 'android'):
+            self.assertEqual(names, ('linux',))
+            for name in ('linux',):
                 self.assertIn(name, names)
-            for name in ('darwin', 'win32', 'ios', 'freebsd', '', 'ANDROID'):
+            for name in ('android', 'darwin', 'win32', 'ios', 'freebsd', '', 'ANDROID'):
                 with self.subTest(name=name):
                     self.assertNotIn(name, names)
 
@@ -68,7 +68,8 @@ class AndroidPlatformGatePatchTests(unittest.TestCase):
         self.assertIsInstance(target.test, ast.BoolOp)
         self.assertIsInstance(target.test.op, ast.Or)
         expression = ast.unparse(target.test)
-        self.assertIn("sys.platform not in ('linux', 'android')", expression)
+        self.assertIn("sys.platform not in ('linux',)", expression)
+        self.assertIn("hasattr(sys, 'getandroidapilevel')", expression)
         self.assertIn("not os.path.isdir('/proc/self/task')", expression)
 
     def test_guardian_entry_preserves_exact_argv_requirement(self):
@@ -79,7 +80,8 @@ class AndroidPlatformGatePatchTests(unittest.TestCase):
         self.assertIsInstance(inner.test.op, ast.Or)
         expression = ast.unparse(inner.test)
         self.assertIn("sys.argv[1:] != ['--guardian']", expression)
-        self.assertIn("sys.platform not in ('linux', 'android')", expression)
+        self.assertIn("sys.platform not in ('linux',)", expression)
+        self.assertIn("hasattr(sys, 'getandroidapilevel')", expression)
 
     def test_parent_cannot_report_ok_when_cleanup_is_false(self):
         # Evaluate the ORIGINAL unchanged response conditional, not a fake OS.
