@@ -115,7 +115,7 @@ class P5MemoryDiagnosticTests(unittest.TestCase):
             self.assertEqual(probe.diagnose(probe_exec=True)['stop_reason'], 'UNSUPPORTED_PLATFORM')
 
     def test_abort_timeout_unknown_stop_without_retry_or_threshold_escalation(self):
-        for failure in ('READER_ABORT', 'TIMEOUT', 'UNKNOWN'):
+        for failure in ('READER_ABORT', 'EXEC_PATH_ABORT', 'TIMEOUT', 'UNKNOWN'):
             with self.subTest(failure=failure), patch.object(probe, 'run_case', side_effect=[
                     {'classification': 'PASS_SCOPED_RESEARCH'}, {'classification': failure}]) as run:
                 report = probe.diagnose(probe_exec=True)
@@ -148,9 +148,13 @@ class P5MemoryDiagnosticTests(unittest.TestCase):
         self.assertEqual(denied['classification'], 'FAILED_BEFORE_READER')
         self.assertEqual(denied['error_errno'], 12)
         aborted = probe.classify('preexec', -6, stages + b'{"stage":"RLIMIT_SETUP"}\n{"stage":"READER_EXEC"}\n')
-        self.assertEqual(aborted['classification'], 'READER_ABORT')
+        self.assertEqual(aborted['classification'], 'EXEC_PATH_ABORT')
         self.assertEqual(aborted['returncode_kind'], 'SIGNAL_6')
         self.assertNotIn('READER_PYTHON', aborted['stages'])
+        reader_prefix = stages + b'{"stage":"RLIMIT_SETUP"}\n{"stage":"READER_EXEC"}\n{"stage":"READER_PYTHON"}\n'
+        self.assertEqual(probe.classify('preexec', -6, reader_prefix)['classification'], 'READER_ABORT')
+        failed_exec = stages + b'{"stage":"RLIMIT_SETUP"}\n{"stage":"READER_EXEC"}\n{"stage":"ERROR","errno":12}\n'
+        self.assertEqual(probe.classify('preexec', 2, failed_exec)['classification'], 'FAILED_BEFORE_READER')
 
     def test_freshness_rejects_missing_unknown_expired_future_drift_and_invalid_types(self):
         fingerprint = 'a'*64

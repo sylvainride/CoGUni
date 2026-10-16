@@ -91,10 +91,12 @@ Lecture du résultat :
 | mmap non borné échoue aussi | Test négatif non discriminant ; aucune preuve d'enforcement |
 | Tous les cas passent | Recherche locale seulement ; P5 Android reste bloqué |
 
-Le rapport distingue `FAILED_BEFORE_READER`, `READER_ABORT`,
+Le rapport distingue `FAILED_BEFORE_READER`, `EXEC_PATH_ABORT`, `READER_ABORT`,
 `READER_FAILED`, `TIMEOUT`, `UNKNOWN`, `SOURCE_PIN_BLOCKED` et les étapes
-connues. Un retour signal appartient au processus remplacé par exec ;
-il n'attribue pas l'abort au linker ou à Python. La sonde ne lance pas
+connues. READER_EXEC marque une tentative, pas la réussite d'execve.
+Sans READER_PYTHON, le signal peut encore appartenir au contrôleur,
+au loader ou au runtime : aucune attribution au lecteur n'est prouvée.
+La sonde ne lance pas
 le guardian : aucun de ses résultats ne prouve son reaping.
 
 ## Contrôle réutilisable de dérive et fraîcheur

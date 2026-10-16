@@ -159,9 +159,13 @@ def classify(case, returncode, output, *, timed_out=False):
         if stages[-1] == 'ERROR' and 'errno' in rows[-1]:
             result['error_errno'] = rows[-1]['errno']
         if returncode < 0:
-            kind = 'READER_ABORT' if 'READER_EXEC' in stages else 'FAILED_BEFORE_READER'
+            # READER_EXEC records intent, not successful execve. Allocating
+            # its arguments under AS may itself abort the controller. Only
+            # the reader's own Python marker identifies a reader-stage abort.
+            kind = ('READER_ABORT' if 'READER_PYTHON' in stages else
+                    'EXEC_PATH_ABORT' if 'READER_EXEC' in stages else 'FAILED_BEFORE_READER')
         elif returncode != 0 or 'ERROR' in stages:
-            kind = 'FAILED_BEFORE_READER' if 'READER_EXEC' not in stages else 'READER_FAILED'
+            kind = 'READER_FAILED' if 'READER_PYTHON' in stages else 'FAILED_BEFORE_READER'
         elif stages == expected:
             kind = 'PASS_SCOPED_RESEARCH'
         else:
