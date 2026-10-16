@@ -78,7 +78,9 @@ def _validate(argv, input_bytes, timeout_seconds, max_output_bytes):
 def run_bounded(argv, input_bytes, *, timeout_seconds, max_output_bytes=32768):
     """Run a reviewed reader with bounded input/output and a physical deadline.
 
-    Linux/main-thread only; other platforms fail closed.  The elapsed bound
+    Linux/main-thread only; Android is blocked pending equivalent memory
+    enforcement and physical qualification. The Android API also detects older
+    Android Python builds reporting 'linux'. The elapsed bound
     includes up to HARD_OVERHEAD_SECONDS of guardian cleanup/startup/forced-exit
     allowance.  SIGTERM/SIGINT trigger cleanup before being propagated.  ``OK``
     always means the direct reader exited zero AND its entire adopted tree was
@@ -86,7 +88,8 @@ def run_bounded(argv, input_bytes, *, timeout_seconds, max_output_bytes=32768):
     """
     global _ACTIVE
     _validate(argv, input_bytes, timeout_seconds, max_output_bytes)
-    if sys.platform not in ('linux', 'android') or not os.path.isdir('/proc/self/task'):
+    if (sys.platform not in ('linux',) or hasattr(sys, 'getandroidapilevel')
+            or not os.path.isdir('/proc/self/task')):
         return ProcessResult('FAILED', b'', 0.0, False, 0, None)
     if _ACTIVE:
         raise RuntimeError('nested or concurrent host process boundary')
@@ -424,7 +427,8 @@ def _guardian():
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] != ['--guardian'] or sys.platform not in ('linux', 'android'):
+    if (sys.argv[1:] != ['--guardian'] or sys.platform not in ('linux',)
+            or hasattr(sys, 'getandroidapilevel')):
         raise SystemExit(2)
     try:
         _guardian()
