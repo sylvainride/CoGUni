@@ -86,7 +86,7 @@ def run_bounded(argv, input_bytes, *, timeout_seconds, max_output_bytes=32768):
     """
     global _ACTIVE
     _validate(argv, input_bytes, timeout_seconds, max_output_bytes)
-    if sys.platform != 'linux' or not os.path.isdir('/proc/self/task'):
+    if sys.platform not in ('linux', 'android') or not os.path.isdir('/proc/self/task'):
         return ProcessResult('FAILED', b'', 0.0, False, 0, None)
     if _ACTIVE:
         raise RuntimeError('nested or concurrent host process boundary')
@@ -424,7 +424,7 @@ def _guardian():
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] != ['--guardian'] or sys.platform != 'linux':
+    if sys.argv[1:] != ['--guardian'] or sys.platform not in ('linux', 'android'):
         raise SystemExit(2)
     try:
         _guardian()

@@ -17,7 +17,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_P6 = '4db2457c34e9dd83e96e4ec11ca8b3a5be9654c9'
 PINS = {
-    'universal/host_process.py': '0c7ca8d56dcbbdff5bd85d568df853de5dd0bc46',
+    'universal/host_process.py': '5b144f8ad9d3763973dcef1b97d21b8575c984a9',
     'universal/host_main.py': '41bdcc2bb1b93c15d6f6f866c69b4048f22572bc',
     'universal/host_github.py': 'c44eaae5e3671cf36327d6857b4733a2efcaf665',
     'universal/continuity.py': 'a7e75dd1c818affa1954fd494347b2a93798feec',
