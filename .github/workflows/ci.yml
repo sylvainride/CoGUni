@@ -8,11 +8,14 @@ name: CoGUni checks
   pull_request:
     branches:
     - main
+    - work/mvp-mission-transport-20261015
   workflow_dispatch: {}
 permissions: {}
 concurrency:
-  group: coguni-checks-${{ github.ref }}
-  cancel-in-progress: true
+  # A later mission/result push must not cancel a healthy synthetic worker.
+  # Unique attempts also avoid replacing older pending runs in a shared group.
+  group: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/work/mvp-mission-transport-') && format('coguni-mission-{0}-{1}', github.run_id, github.run_attempt) || format('coguni-checks-{0}', github.ref) }}
+  cancel-in-progress: ${{ !(github.event_name == 'push' && startsWith(github.ref, 'refs/heads/work/mvp-mission-transport-')) }}
 env:
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONWARNINGS: error::ResourceWarning
@@ -173,6 +176,9 @@ jobs:
       run: python3 -B tools/run_ci_checks.py --mode full --out evidence/full
     - name: Run bounded generative fixtures
       run: python3 -B tools/run_generative_cases_v8.py --out evidence/generative
+    - name: Process an owner public synthetic mission on the qualified host
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/work/mvp-mission-transport-')
+      run: python3 -B tools/run_public_mission.py --out evidence/public-mission.json
     - name: Emit whitelisted JSON evidence to the job log
       if: always()
       run: |-

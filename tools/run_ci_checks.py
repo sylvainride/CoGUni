@@ -27,6 +27,30 @@ OWNER_TESTS = (
     "tests.test_policy_runner_v8.PolicyInputTests",
     "tests.test_isolation_v6.TestIsolationV6.test_missing_bubblewrap_never_returns_unconfined_command",
     "tests.test_ci_binding", "tests.test_ci_checks", "tests.test_consent",
+    "tests.test_mission_executor.MissionExecutorOwnerTests",
+    "tests.test_mission_cli.MissionCLIOwnerTests",
+    "tests.test_public_mission_transport",
+    "tests.test_public_mission_admission",
+    "tests.test_parallel_policy", "tests.test_parallel_scheduler",
+    "tests.test_parallel_workflow", "tests.test_parallel_transport",
+    # Cheap, no-untrusted-worker checks for the offline Chat bridge. These
+    # belong in owner-contracts too: passing sandbox-runtime alone must not
+    # hide a protocol regression or a spoofed worker receipt.
+    "tests.test_mission_contracts", "tests.test_mission_transitions",
+    "tests.test_mission_admission", "tests.test_mission_liveness",
+    "tests.test_mission_polling", "tests.test_mission_versioning",
+    "tests.test_mission_handoff", "tests.test_mission_chat_fixture",
+    "tests.test_mission_redaction", "tests.test_mission_crash_recovery",
+    "tests.test_mission_projects", "tests.test_mission_artifacts",
+    "tests.test_mission_adversarial_matrix",
+    "tests.test_continuity_source_races", "tests.test_mission_confined_worker",
+    "tests.test_mission_result_review", "tests.test_mission_p32_cas",
+    "tests.test_mission_observability", "tests.test_mission_p33_oracle",
+    "tests.test_mission_p34_dag", "tests.test_mission_p35_silence",
+    "tests.test_mission_p36_two_turns", "tests.test_mission_p43_registry",
+    "tests.test_mission_p44_floot_handoff", "tests.test_mission_p47_offline_acceptance",
+    # P5 trusted owner host/read-only reader; no untrusted worker or network.
+    "tests.test_host_github", "tests.test_host_process", "tests.test_host_main",
 ) + tuple("tests.test_generative_v8.GenerativeTests." + name for name in (
     "test_strict_default_still_requires_sha_and_registered_action",
     "test_generative_requires_mode_policy_action_and_absent_expected_sha",

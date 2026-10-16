@@ -126,14 +126,18 @@ class ContinuityJournal:
     exists. Do not expose this object or its database to workers.
     """
 
-    def __init__(self, path, clock=time.time):
+    def __init__(self, path, clock=time.time, *, busy_timeout_ms=10000):
+        # Owner hosts may require fail-fast contention; legacy callers retain
+        # the exact existing wait. This changes no store/authority semantics.
+        if type(busy_timeout_ms) is not int or not 0 <= busy_timeout_ms <= 10000:
+            raise GuardError("invalid continuity busy timeout", "BLOCK")
         self.path = Path(path).resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.clock = clock
-        self.db = sqlite3.connect(self.path, timeout=10, isolation_level=None)
+        self.db = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         try:
-            self.db.execute("PRAGMA busy_timeout=10000")
+            self.db.execute("PRAGMA busy_timeout=" + str(busy_timeout_ms))
             expected = {"continuity_meta", "continuity_tasks", "continuity_receipts", "continuity_events"}
             tables = {r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if tables and tables != expected:
